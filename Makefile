@@ -1,4 +1,4 @@
-.PHONY: up
+.PHONY: up install
 
 up:
 	jupyter notebook --config jupyter/config.py
