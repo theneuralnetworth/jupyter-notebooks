@@ -929,7 +929,7 @@ c = get_config()  #noqa
 
 ## DEPRECATED, use root_dir.
 #  Default: ''
-c.ServerApp.notebook_dir = 'notebooks'
+# c.ServerApp.notebook_dir = 'notebooks'
 
 ## Whether to open in a browser after starting.
 #                          The specific browser used is platform dependent and
@@ -981,7 +981,7 @@ c.ServerApp.notebook_dir = 'notebooks'
 
 ## The directory to use for notebooks and kernels.
 #  Default: ''
-# c.ServerApp.root_dir = ''
+c.ServerApp.root_dir = 'notebooks'
 
 ## The session manager class to use.
 #  Default: 'builtins.object'
