@@ -7,9 +7,9 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.11.2
+#       jupytext_version: 1.16.4
 #   kernelspec:
-#     display_name: Python 3
+#     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
@@ -59,12 +59,13 @@ for dirname, _, filenames in os.walk(directory):
 print(f"Downloaded {len(files)} files")
 
 sp500_symbols = pd.read_csv('datasets/sp500.csv')
+sp500_symbols = sp500_symbols.rename(columns={'Symbol': 'symbol', 'GICS Sector': 'sector'})
 
-sp500_info = sp500_symbols[['Symbol', 'GICS Sector']]
+sp500_info = sp500_symbols[['symbol', 'sector']]
 def is_sp500(filename):
     """Check if the filename is a SP500 stock"""
     symbol = os.path.basename(filename).split('.')[0]
-    return symbol in sp500_info['Symbol'].values
+    return symbol in sp500_info['symbol'].values
 
 files = list(filter(is_sp500, files))
 print(f"Filtered down to {len(files)} files")
@@ -80,16 +81,20 @@ for f in files:
 
 print("Merging all dataframes into one")
 df = pd.concat(dataframes, ignore_index=True)
-df = df.merge(sp500_info, how='left', left_on='symbol', right_on='Symbol')
-df['GICS Sector'], _ = pd.factorize(df['GICS Sector'])
-sectors = dict(enumerate(sp500_info['GICS Sector'].unique()))
-df.shape
+df = df.merge(sp500_info, how='left', on='symbol')
+
+df['sector'], sectors = pd.factorize(df['sector'])
+sectors = dict(enumerate(sectors))
 
 # Save the dataframe
 print("Saving the dataset to ", STOCKS_DATASET)
 if not os.path.exists(STOCKS_DATASET) or input(f"Overwrite {STOCKS_DATASET}? [y/n] ").lower() == 'y':
     df.to_csv(STOCKS_DATASET, index=False)
 
+
+# %%
+print(sectors)
+df.drop_duplicates(subset='sector')
 
 # %% [markdown]
 # ## 2. Exploratory Data Analysis
