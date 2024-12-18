@@ -24,6 +24,7 @@ import os
 import pandas as pd
 import json
 from dotenv import load_dotenv
+import requests
 
 # COMMON CONSTANTS
 CUTOFF_DATE = "2004-11-26"
@@ -304,3 +305,29 @@ def get_quarterly_gdp_per_capita_from_quarter(row):
     return real_gdp_per_capita_mapping.get(quarter_key, None)
 
 data['REAL_GDP_PER_CAPITA'] = data.apply(get_quarterly_gdp_per_capita_from_quarter, axis=1)
+
+# %% [markdown]
+# #### 3.1.6. Future and Past Returns
+
+# Ensure the data is sorted by symbol (company) and date
+df = df.sort_values(['symbol', 'Date']).reset_index(drop=True)
+
+def calculate_returns(group):
+
+    group['Daily Return'] = group['Close'].pct_change()
+
+    group['Next Day Return'] = group['Daily Return'].shift(-1) * 100  # Next day
+    group['Next Week Return'] = group['Daily Return'].shift(-7) * 100  # Next week
+    group['Next Month Return'] = group['Daily Return'].shift(-30) * 100  # Next month
+    group['Next Year Return'] = group['Daily Return'].shift(-365) * 100  # Next year
+
+    group['7-Day Return'] = (group['Close'] / group['Close'].shift(7) - 1) * 100  # Last 7 days
+    group['1-Month Return'] = (group['Close'] / group['Close'].shift(30) - 1) * 100  # Last 30 days
+    group['1-Year Return'] = (group['Close'] / group['Close'].shift(365) - 1) * 100  # Last 365 days
+    
+    return group
+
+# Apply the function to each company group
+df = df.groupby('symbol', group_keys=False).apply(calculate_returns).reset_index(drop=True)
+
+# %%
