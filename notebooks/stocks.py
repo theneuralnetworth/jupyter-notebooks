@@ -36,7 +36,6 @@ from sklearn.ensemble import RandomForestRegressor
 import lightgbm as lgb
 import numpy as np
 
-
 # COMMON CONSTANTS
 CUTOFF_DATE = "2004-11-26"
 STOCKS_DATASET = os.path.join(os.path.dirname(__file__), 'datasets', 'stocks.csv')
@@ -451,3 +450,28 @@ r2 = r2_score(target_test, target_pred)
 
 print(f"Mean Squared Error: {mse:.4f}")
 print(f"R-Squared: {r2:.4f}")
+# %% [markdown]
+# #### 3.1.6. Future and Past Returns
+
+# Ensure the data is sorted by symbol (company) and date
+df = df.sort_values(['symbol', 'Date']).reset_index(drop=True)
+
+def calculate_returns(group):
+
+    group['Daily Return'] = group['Close'].pct_change()
+
+    group['Next Day Return'] = group['Daily Return'].shift(-1) * 100  # Next day
+    group['Next Week Return'] = group['Daily Return'].shift(-7) * 100  # Next week
+    group['Next Month Return'] = group['Daily Return'].shift(-30) * 100  # Next month
+    group['Next Year Return'] = group['Daily Return'].shift(-365) * 100  # Next year
+
+    group['7-Day Return'] = (group['Close'] / group['Close'].shift(7) - 1) * 100  # Last 7 days
+    group['1-Month Return'] = (group['Close'] / group['Close'].shift(30) - 1) * 100  # Last 30 days
+    group['1-Year Return'] = (group['Close'] / group['Close'].shift(365) - 1) * 100  # Last 365 days
+    
+    return group
+
+# Apply the function to each company group
+df = df.groupby('symbol', group_keys=False).apply(calculate_returns).reset_index(drop=True)
+
+# %%
