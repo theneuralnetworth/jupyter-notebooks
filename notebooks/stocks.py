@@ -7,9 +7,9 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.11.2
+#       jupytext_version: 1.16.4
 #   kernelspec:
-#     display_name: Python 3
+#     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
@@ -24,15 +24,26 @@ import os
 import pandas as pd
 import json
 from dotenv import load_dotenv
+import kagglehub
+import os
+import matplotlib.pyplot as plt
+import requests
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+import xgboost as xgb
+from sklearn.ensemble import RandomForestRegressor
+import lightgbm as lgb
+import numpy as np
 
 # COMMON CONSTANTS
 CUTOFF_DATE = "2004-11-26"
-STOCKS_DATASET = "datasets/stocks.csv"
+STOCKS_DATASET = os.path.join(os.path.dirname(__file__), 'datasets', 'stocks.csv')
 
 # Load environment variables
 load_dotenv()
 api_key = os.getenv('ALPHA_VANTAGE_API_KEY')
-use_local_files = os.getenv('USE_LOCAL_FILES', 'false').lower() == 'true'
+use_local_files = os.getenv('USE_LOCAL_FILES', 'true').lower() == 'true'
 
 # %% [markdown]
 # ## 1. Get the dataset
@@ -46,7 +57,6 @@ use_local_files = os.getenv('USE_LOCAL_FILES', 'false').lower() == 'true'
 # 1. Stores the dataset in the `STOCKS_DATASET` (default: `datasets/stocks.csv`) file
 
 # %%
-import kagglehub
 
 # KaggleHub won't download the dataset again if it already exists
 directory = kagglehub.dataset_download("benjaminpo/s-and-p-500-with-dividends-and-splits-daily-updated")
@@ -58,9 +68,10 @@ for dirname, _, filenames in os.walk(directory):
 
 print(f"Downloaded {len(files)} files")
 
-sp500_symbols = pd.read_csv('datasets/sp500.csv')
+sp500_symbols = pd.read_csv(os.path.join(os.path.dirname(__file__), 'datasets', 'sp500.csv'))
+sp500_symbols = sp500_symbols.rename(columns={'Symbol': 'Symbol', 'GICS Sector': 'Sector'})
 
-sp500_info = sp500_symbols[['Symbol', 'GICS Sector']]
+sp500_info = sp500_symbols[['Symbol', 'Sector']]
 def is_sp500(filename):
     """Check if the filename is a SP500 stock"""
     symbol = os.path.basename(filename).split('.')[0]
@@ -74,22 +85,26 @@ dataframes = []
 
 for f in files:
     df = pd.read_csv(f)
-    df['symbol'] = os.path.basename(f).split('.')[0]
+    df['Symbol'] = str(os.path.basename(f).split('.')[0])
     df = df[df['Date'] > CUTOFF_DATE]
     dataframes.append(df)
 
 print("Merging all dataframes into one")
-df = pd.concat(dataframes, ignore_index=True)
-df = df.merge(sp500_info, how='left', left_on='symbol', right_on='Symbol')
-df['GICS Sector'], _ = pd.factorize(df['GICS Sector'])
-sectors = dict(enumerate(sp500_info['GICS Sector'].unique()))
-df.shape
+data = pd.concat(dataframes, ignore_index=True)
+data = data.merge(sp500_info, how='left', on='Symbol')
+
+data['sector'], sectors = pd.factorize(data['Sector'])
+sectors = dict(enumerate(sectors))
 
 # Save the dataframe
 print("Saving the dataset to ", STOCKS_DATASET)
 if not os.path.exists(STOCKS_DATASET) or input(f"Overwrite {STOCKS_DATASET}? [y/n] ").lower() == 'y':
-    df.to_csv(STOCKS_DATASET, index=False)
+    data.to_csv(STOCKS_DATASET, index=False)
 
+
+# %%
+print(sectors)
+data.drop_duplicates(subset='sector')
 
 # %% [markdown]
 # ## 2. Exploratory Data Analysis
@@ -106,6 +121,39 @@ if not os.path.exists(STOCKS_DATASET) or input(f"Overwrite {STOCKS_DATASET}? [y/
 # #### 3.1.1 CPI
 
 # %%
+#Convert every date to datetime
+data['Date'] = pd.to_datetime(data['Date'], utc=True)
+
+#%%
+## Add timeframe features
+
+data['Quarter'] = data['Date'].dt.quarter
+data['week_number'] = data['Date'].dt.isocalendar().week
+data['week_day'] = data['Date'].dt.weekday
+data['Month']  = data['Date'].dt.month
+
+#%%
+## Calculate new features
+data["Daily Range"] = data["High"] - data["Low"]
+data["Direction"] = (data["Close"] > data["Open"]).astype(int)
+data["Percentage Change"] = ((data["Close"] - data["Open"]) / data["Open"]) * 100
+data["Momentum_10"] = data["Close"] - data["Close"].shift(10)
+data['Volume Change'] = data['Volume'].pct_change() * 100
+
+# Daily Return
+data['7-Day Return'] = (data['Close'] / data['Close'].shift(7) - 1) * 100  # 7 days
+data['1-Month Return'] = (data['Close'] / data['Close'].shift(30) - 1) * 100  # 30 days
+data['6-Month Return'] = (data['Close'] / data['Close'].shift(182) - 1) * 100  # ~6 months
+data['1-Year Return'] = (data['Close'] / data['Close'].shift(365) - 1) * 100  # 1 year
+#Future daily return (target)
+data['Daily Return'] = data['Close'].pct_change()
+data['Next Day Return'] = data['Daily Return'].shift(-1) * 100
+data['Next Week Return'] = data['Daily Return'].shift(-7)
+data['Next Month Return'] = data['Daily Return'].shift(-30)
+
+data.info()
+#%%
+
 ALPHAVANTAGE_API_URL = f"https://www.alphavantage.co/query?function=CPI&interval=monthly&apikey={api_key}"
 file_path = 'datasets/economic_indicators/cpi.json'
 
@@ -131,10 +179,12 @@ cpi_mapping = {
     entry['date'][:7]: float(entry['value'])
     for entry in cpi_monthly
 }
+data.info()
 
 data['YearMonth'] = data['Date'].dt.strftime('%Y-%m')
 
 data['CPI'] = data['YearMonth'].map(cpi_mapping)
+
 
 data.drop(columns=['YearMonth'], inplace=True)
 
@@ -226,7 +276,7 @@ df_merged.drop(columns=['date', 'Year', 'Month'], inplace=True)
 df_merged.rename(columns={'value': 'Interest Rate'}, inplace=True)
 
 df_merged['Interest Rate'] = df_merged['Interest Rate'] / 100
-
+data['Interest Rate'] = df_merged['Interest Rate']
 # %% [markdown]
 # #### 3.1.4 Real GDP 
 
@@ -299,3 +349,127 @@ def get_quarterly_gdp_per_capita_from_quarter(row):
     return real_gdp_per_capita_mapping.get(quarter_key, None)
 
 data['REAL_GDP_PER_CAPITA'] = data.apply(get_quarterly_gdp_per_capita_from_quarter, axis=1)
+
+# %% [markdown]
+# #### 3.1.6. Future and Past Returns
+
+# Ensure the data is sorted by symbol (company) and date
+df = df.sort_values(['Symbol', 'Date']).reset_index(drop=True)
+
+def calculate_returns(group):
+
+    group['Daily Return'] = group['Close'].pct_change()
+
+    group['Next Day Return'] = group['Daily Return'].shift(-1) * 100  # Next day
+
+    group['7-Day Return'] = (group['Close'] / group['Close'].shift(7) - 1) * 100  # Last 7 days
+    group['1-Month Return'] = (group['Close'] / group['Close'].shift(30) - 1) * 100  # Last 30 days
+    group['1-Year Return'] = (group['Close'] / group['Close'].shift(365) - 1) * 100  # Last 365 days
+    
+    return group
+
+# Apply the function to each company group
+df = df.groupby('Symbol', group_keys=False).apply(calculate_returns).reset_index(drop=True)
+
+
+#%%
+# Correlation Matrix
+def get_correlation_matrix():
+    correlation_matrix = data.corr()
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap='coolwarm', square=True, cbar_kws={"shrink": .8})
+    plt.title('Correlation Matrix')
+    plt.show()
+
+# get_correlation_matrix()
+
+#%%
+# Remove outliers~
+
+data['Z-Score'] = (data['Daily Return'] - data['Daily Return'].mean()) / data['Daily Return'].std()
+data_no_outliers = data[(data['Z-Score'] >= -2.5) & (data['Z-Score'] <= 2.5)]
+data_no_outliers = data_no_outliers.drop(columns=['Z-Score'])
+data = data_no_outliers
+
+#%%
+# Ensure there are no missing values before defining features and target
+data = data.dropna()  # Ensure there are no missing values
+
+# Define the target variable and features
+target = 'Next Day Return'  # Example target variable
+features = [
+    'Quarter', 'week_number', 'week_day', 'CPI',
+    'Daily Range', 'Volume', 'Momentum_10', 'Volume Change',
+    'Percentage Change', '7-Day Return', '1-Month Return', '6-Month Return',
+    '1-Year Return', 'Daily Return'
+]
+
+# Prepare the input data
+inputData = data[features]
+targetVariable = data[target]
+
+# Check if inputData and targetVariable have the same length
+if len(inputData) != len(targetVariable):
+    raise ValueError("Mismatch between input data and target variable lengths.")
+
+# Split the data into training and testing sets
+input_train, input_test, target_train, target_test = train_test_split(inputData, targetVariable, test_size=0.2, random_state=42, shuffle=False)
+
+#%%
+# Define models to use
+def get_ML_model(model_name, X_train, y_train):
+    if model_name == 'RandomForest':
+        model = RandomForestRegressor(
+            n_estimators=500,
+            random_state=42,
+            max_depth=None,
+            min_samples_split=2,
+            min_samples_leaf=1,
+        )
+    elif model_name == 'XGBoost':
+        model = xgb.XGBRegressor(
+            n_estimators=500,
+            learning_rate=0.05,
+            objective='reg:squarederror',
+            random_state=42,
+            booster="dart"
+        )
+    elif model_name == 'LightGBM':
+        params = {
+            'objective': 'regression',
+            'metric': 'mse',
+            'boosting_type': 'gbdt',
+            'num_leaves': 31,
+            'learning_rate': 0.05,
+            'feature_fraction': 0.9,
+            'bagging_fraction': 0.8,
+            'bagging_freq': 5,
+            'verbose': -1
+        }
+        model = lgb.LGBMRegressor(**params)
+    else:
+        raise ValueError(f"Model '{model_name}' is not recognized. Please choose 'RandomForest', 'XGBoost', or 'LightGBM'.")
+
+    model.fit(X_train, y_train)
+
+    return model
+
+input_train = input_train.replace([np.inf, -np.inf], np.nan)
+input_train = input_train.dropna()
+
+model_name = 'XGBoost'
+# model_name = 'RandomForest'
+# model_name = 'LightGBM'
+model = get_ML_model(model_name, input_train, target_train)
+
+
+#%%
+# Predict on the test set
+target_pred = model.predict(input_test)
+
+mse = mean_squared_error(target_test, target_pred)
+r2 = r2_score(target_test, target_pred)
+
+print(f"Mean Squared Error: {mse:.4f}")
+print(f"R-Squared: {r2:.4f}")
+# %%
