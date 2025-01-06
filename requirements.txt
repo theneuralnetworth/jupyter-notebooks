@@ -6,3 +6,6 @@ scikit-learn==1.5.2
 matplotlib==3.9.3
 seaborn==0.13.2
 jupytext==1.16.4
+fastapi==0.115.6
+pydantic==2.10.4
+uvicorn==0.34.0
