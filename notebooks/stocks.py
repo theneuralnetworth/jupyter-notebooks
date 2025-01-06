@@ -350,6 +350,28 @@ def get_quarterly_gdp_per_capita_from_quarter(row):
 
 data['REAL_GDP_PER_CAPITA'] = data.apply(get_quarterly_gdp_per_capita_from_quarter, axis=1)
 
+# %% [markdown]
+# #### 3.1.6. Future and Past Returns
+
+# Ensure the data is sorted by symbol (company) and date
+df = df.sort_values(['Symbol', 'Date']).reset_index(drop=True)
+
+def calculate_returns(group):
+
+    group['Daily Return'] = group['Close'].pct_change()
+
+    group['Next Day Return'] = group['Daily Return'].shift(-1) * 100  # Next day
+
+    group['7-Day Return'] = (group['Close'] / group['Close'].shift(7) - 1) * 100  # Last 7 days
+    group['1-Month Return'] = (group['Close'] / group['Close'].shift(30) - 1) * 100  # Last 30 days
+    group['1-Year Return'] = (group['Close'] / group['Close'].shift(365) - 1) * 100  # Last 365 days
+    
+    return group
+
+# Apply the function to each company group
+df = df.groupby('Symbol', group_keys=False).apply(calculate_returns).reset_index(drop=True)
+
+
 #%%
 # Correlation Matrix
 def get_correlation_matrix():
@@ -379,7 +401,7 @@ features = [
     'Quarter', 'week_number', 'week_day', 'CPI',
     'Daily Range', 'Volume', 'Momentum_10', 'Volume Change',
     'Percentage Change', '7-Day Return', '1-Month Return', '6-Month Return',
-    '1-Year Return', 'Daily Return', 'Next Week Return', 'Next Month Return'
+    '1-Year Return', 'Daily Return'
 ]
 
 # Prepare the input data
@@ -398,7 +420,7 @@ input_train, input_test, target_train, target_test = train_test_split(inputData,
 def get_ML_model(model_name, X_train, y_train):
     if model_name == 'RandomForest':
         model = RandomForestRegressor(
-            n_estimators='inf',
+            n_estimators=500,
             random_state=42,
             max_depth=None,
             min_samples_split=2,
@@ -450,28 +472,4 @@ r2 = r2_score(target_test, target_pred)
 
 print(f"Mean Squared Error: {mse:.4f}")
 print(f"R-Squared: {r2:.4f}")
-# %% [markdown]
-# #### 3.1.6. Future and Past Returns
-
-# Ensure the data is sorted by symbol (company) and date
-df = df.sort_values(['symbol', 'Date']).reset_index(drop=True)
-
-def calculate_returns(group):
-
-    group['Daily Return'] = group['Close'].pct_change()
-
-    group['Next Day Return'] = group['Daily Return'].shift(-1) * 100  # Next day
-    group['Next Week Return'] = group['Daily Return'].shift(-7) * 100  # Next week
-    group['Next Month Return'] = group['Daily Return'].shift(-30) * 100  # Next month
-    group['Next Year Return'] = group['Daily Return'].shift(-365) * 100  # Next year
-
-    group['7-Day Return'] = (group['Close'] / group['Close'].shift(7) - 1) * 100  # Last 7 days
-    group['1-Month Return'] = (group['Close'] / group['Close'].shift(30) - 1) * 100  # Last 30 days
-    group['1-Year Return'] = (group['Close'] / group['Close'].shift(365) - 1) * 100  # Last 365 days
-    
-    return group
-
-# Apply the function to each company group
-df = df.groupby('symbol', group_keys=False).apply(calculate_returns).reset_index(drop=True)
-
 # %%
