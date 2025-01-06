@@ -81,6 +81,7 @@ files = list(filter(is_sp500, files))
 print(f"Filtered down to {len(files)} files")
 
 # Merge all the files into a single dataframe
+# Merge all the files into a single dataframe
 dataframes = []
 
 for f in files:
@@ -93,32 +94,15 @@ print("Merging all dataframes into one")
 data = pd.concat(dataframes, ignore_index=True)
 data = data.merge(sp500_info, how='left', on='Symbol')
 
-data['sector'], sectors = pd.factorize(data['Sector'])
-sectors = dict(enumerate(sectors))
+# One-Hot Encoding for Sector
+data = pd.get_dummies(data, columns=['Sector'], prefix='Sector')
 
 # Save the dataframe
 print("Saving the dataset to ", STOCKS_DATASET)
 if not os.path.exists(STOCKS_DATASET) or input(f"Overwrite {STOCKS_DATASET}? [y/n] ").lower() == 'y':
     data.to_csv(STOCKS_DATASET, index=False)
 
-
-# %%
-print(sectors)
-data.drop_duplicates(subset='sector')
-
-# %% [markdown]
-# ## 2. Exploratory Data Analysis
-#
-# ...
-
-# %% [markdown]
-# ## 3. Feature Engineering
-
-# %% [markdown]
-# ### 3.1 Economic indicators
-
-# %% [markdown]
-# #### 3.1.1 CPI
+print("One-hot encoded columns:", [col for col in data.columns if col.startswith('Sector_')])
 
 # %%
 #Convert every date to datetime
@@ -140,53 +124,16 @@ data["Percentage Change"] = ((data["Close"] - data["Open"]) / data["Open"]) * 10
 data["Momentum_10"] = data["Close"] - data["Close"].shift(10)
 data['Volume Change'] = data['Volume'].pct_change() * 100
 
+# Remove rows where Volume Change is infinite
+data = data[~np.isinf(data['Volume Change'])]
+
 # Daily Return
-data['7-Day Return'] = (data['Close'] / data['Close'].shift(7) - 1) * 100  # 7 days
-data['1-Month Return'] = (data['Close'] / data['Close'].shift(30) - 1) * 100  # 30 days
-data['6-Month Return'] = (data['Close'] / data['Close'].shift(182) - 1) * 100  # ~6 months
-data['1-Year Return'] = (data['Close'] / data['Close'].shift(365) - 1) * 100  # 1 year
+data['Last Week Return'] = (data['Close'] / data['Close'].shift(7) - 1) * 100
 #Future daily return (target)
 data['Daily Return'] = data['Close'].pct_change()
 data['Next Day Return'] = data['Daily Return'].shift(-1) * 100
-data['Next Week Return'] = data['Daily Return'].shift(-7)
-data['Next Month Return'] = data['Daily Return'].shift(-30)
 
 data.info()
-#%%
-
-ALPHAVANTAGE_API_URL = f"https://www.alphavantage.co/query?function=CPI&interval=monthly&apikey={api_key}"
-file_path = 'datasets/economic_indicators/cpi.json'
-
-folder_path = os.path.dirname(file_path)
-if not os.path.exists(folder_path):
-    os.makedirs(folder_path)
-
-def get_cpi():
-    response = requests.get(ALPHAVANTAGE_API_URL)
-    data = response.json()
-    cpi_monthly = data['data']
-    return [{"date": cpi['date'], "value": float(cpi['value'])} for cpi in cpi_monthly]
-
-if use_local_files and os.path.exists(file_path):
-    with open(file_path, mode='r') as fp:
-        cpi_monthly = json.load(fp)
-else:
-    cpi_monthly = get_cpi()
-    with open(file_path, mode='w') as fp:
-        json.dump(cpi_monthly, fp)
-
-cpi_mapping = {
-    entry['date'][:7]: float(entry['value'])
-    for entry in cpi_monthly
-}
-data.info()
-
-data['YearMonth'] = data['Date'].dt.strftime('%Y-%m')
-
-data['CPI'] = data['YearMonth'].map(cpi_mapping)
-
-
-data.drop(columns=['YearMonth'], inplace=True)
 
 # %% [markdown]
 # #### 3.1.2 Inflation
@@ -237,8 +184,6 @@ if data['Inflation'].isnull().any():
 
 # %% [markdown]
 # #### 3.1.3 Interest rates
-
-# %%
 ALPHAVANTAGE_API_URL = f"https://www.alphavantage.co/query?function=FEDERAL_FUNDS_RATE&interval=monthly&apikey=${api_key}"
 file_path = 'datasets/economic_indicators/interest_rates.json'
 
@@ -277,100 +222,6 @@ df_merged.rename(columns={'value': 'Interest Rate'}, inplace=True)
 
 df_merged['Interest Rate'] = df_merged['Interest Rate'] / 100
 data['Interest Rate'] = df_merged['Interest Rate']
-# %% [markdown]
-# #### 3.1.4 Real GDP 
-
-# %%
-ALPHAVANTAGE_API_URL = f"https://www.alphavantage.co/query?function=REAL_GDP&interval=quarterly&apikey={api_key}"
-file_path = 'datasets/economic_indicators/real_gdp.json'
-
-folder_path = os.path.dirname(file_path)
-if not os.path.exists(folder_path):
-    os.makedirs(folder_path)
-
-def get_real_gdp():
-    response = requests.get(ALPHAVANTAGE_API_URL)
-    data = response.json()
-    real_gdp_quarterly = data['data']
-    return [{"date": real_gdp['date'], "value": float(real_gdp['value'])} for real_gdp in real_gdp_quarterly]
-
-if use_local_files and os.path.exists(file_path):
-    with open(file_path, mode='r') as fp:
-        real_gdp_quarterly = json.load(fp)
-else:
-    real_gdp_quarterly = get_real_gdp()
-    with open(file_path, mode='w') as fp:
-        json.dump(real_gdp_quarterly, fp)
-
-real_gdp_mapping = {
-    entry['date'][:4] + '-Q' + str((int(entry['date'][5:7]) - 1) // 3 + 1): entry['value']
-    for entry in real_gdp_quarterly
-}
-
-def get_quarterly_gdp_from_quarter(row):
-    quarter_key = row['Date'].strftime('%Y') + '-Q' + str(row['Quarter'])
-    return real_gdp_mapping.get(quarter_key, None)
-
-data['REAL_GDP'] = data.apply(get_quarterly_gdp_from_quarter, axis=1)
-
-# %% [markdown]
-# #### 3.1.5 Real GDP per capita
-
-# %%
-ALPHAVANTAGE_API_URL = f"https://www.alphavantage.co/query?function=REAL_GDP_PER_CAPITA&interval=quarterly&apikey={api_key}"
-file_path = 'datasets/economic_indicators/real_gdp_per_capita.json'
-
-folder_path = os.path.dirname(file_path)
-if not os.path.exists(folder_path):
-    os.makedirs(folder_path)
-
-def get_real_gdp_per_capita():
-    response = requests.get(ALPHAVANTAGE_API_URL)
-    data = response.json()
-    real_gdp_per_capita_quarterly = data['data']
-    return [{"date": real_gdp_per_capita['date'], "value": float(real_gdp_per_capita['value'])} for real_gdp_per_capita in real_gdp_per_capita_quarterly]
-
-if use_local_files and os.path.exists(file_path):
-    with open(file_path, mode='r') as fp:
-        real_gdp_per_capita_quarterly = json.load(fp)
-else:
-    real_gdp_per_capita_quarterly = get_real_gdp_per_capita()
-    with open(file_path, mode='w') as fp:
-        json.dump(real_gdp_per_capita_quarterly, fp)
-
-
-real_gdp_per_capita_mapping = {
-    entry['date'][:4] + '-Q' + str((int(entry['date'][5:7]) - 1) // 3 + 1): entry['value']
-    for entry in real_gdp_per_capita_quarterly
-}
-
-def get_quarterly_gdp_per_capita_from_quarter(row):
-    quarter_key = row['Date'].strftime('%Y') + '-Q' + str(row['Quarter'])
-    return real_gdp_per_capita_mapping.get(quarter_key, None)
-
-data['REAL_GDP_PER_CAPITA'] = data.apply(get_quarterly_gdp_per_capita_from_quarter, axis=1)
-
-# %% [markdown]
-# #### 3.1.6. Future and Past Returns
-
-# Ensure the data is sorted by symbol (company) and date
-df = df.sort_values(['Symbol', 'Date']).reset_index(drop=True)
-
-def calculate_returns(group):
-
-    group['Daily Return'] = group['Close'].pct_change()
-
-    group['Next Day Return'] = group['Daily Return'].shift(-1) * 100  # Next day
-
-    group['7-Day Return'] = (group['Close'] / group['Close'].shift(7) - 1) * 100  # Last 7 days
-    group['1-Month Return'] = (group['Close'] / group['Close'].shift(30) - 1) * 100  # Last 30 days
-    group['1-Year Return'] = (group['Close'] / group['Close'].shift(365) - 1) * 100  # Last 365 days
-    
-    return group
-
-# Apply the function to each company group
-df = df.groupby('Symbol', group_keys=False).apply(calculate_returns).reset_index(drop=True)
-
 
 #%%
 # Correlation Matrix
@@ -384,8 +235,7 @@ def get_correlation_matrix():
 # get_correlation_matrix()
 
 #%%
-# Remove outliers~
-
+# Remove outliers
 data['Z-Score'] = (data['Daily Return'] - data['Daily Return'].mean()) / data['Daily Return'].std()
 data_no_outliers = data[(data['Z-Score'] >= -2.5) & (data['Z-Score'] <= 2.5)]
 data_no_outliers = data_no_outliers.drop(columns=['Z-Score'])
@@ -394,73 +244,39 @@ data = data_no_outliers
 #%%
 # Ensure there are no missing values before defining features and target
 data = data.dropna()  # Ensure there are no missing values
+data.drop(columns="Symbol")
+data.info()
+data.round(4)
 
-# Define the target variable and features
-target = 'Next Day Return'  # Example target variable
+#%%
+# Define targets and features
+target = 'Next Day Return'
 features = [
-    'Quarter', 'week_number', 'week_day', 'CPI',
-    'Daily Range', 'Volume', 'Momentum_10', 'Volume Change',
-    'Percentage Change', '7-Day Return', '1-Month Return', '6-Month Return',
-    '1-Year Return', 'Daily Return'
+    'Adj Close', 'Close', 'High', 'Low','Open', 'Direction', 'Quarter', 'week_number', 'week_day', 'Inflation', 'Interest Rate', 'Daily Range', 'Volume', 'Momentum_10', 'Volume Change', 'Percentage Change', 'Last Week Return', 'Daily Return', 'Sector_Communication Services', 'Sector_Consumer Discretionary', 'Sector_Consumer Staples', 'Sector_Energy', 'Sector_Financials', 'Sector_Health Care', 'Sector_Industrials',
+    'Sector_Information Technology', 'Sector_Materials',
+    'Sector_Real Estate', 'Sector_Utilities'
 ]
-
+#%%
 # Prepare the input data
 inputData = data[features]
 targetVariable = data[target]
-
-# Check if inputData and targetVariable have the same length
-if len(inputData) != len(targetVariable):
-    raise ValueError("Mismatch between input data and target variable lengths.")
 
 # Split the data into training and testing sets
 input_train, input_test, target_train, target_test = train_test_split(inputData, targetVariable, test_size=0.2, random_state=42, shuffle=False)
 
 #%%
-# Define models to use
-def get_ML_model(model_name, X_train, y_train):
-    if model_name == 'RandomForest':
-        model = RandomForestRegressor(
-            n_estimators=500,
-            random_state=42,
-            max_depth=None,
-            min_samples_split=2,
-            min_samples_leaf=1,
-        )
-    elif model_name == 'XGBoost':
-        model = xgb.XGBRegressor(
-            n_estimators=500,
+# Get the model
+model_name = 'XGBoost'
+model = xgb.XGBRegressor(
+            n_estimators=100,
             learning_rate=0.05,
             objective='reg:squarederror',
             random_state=42,
-            booster="dart"
+            booster="gbtree"
         )
-    elif model_name == 'LightGBM':
-        params = {
-            'objective': 'regression',
-            'metric': 'mse',
-            'boosting_type': 'gbdt',
-            'num_leaves': 31,
-            'learning_rate': 0.05,
-            'feature_fraction': 0.9,
-            'bagging_fraction': 0.8,
-            'bagging_freq': 5,
-            'verbose': -1
-        }
-        model = lgb.LGBMRegressor(**params)
-    else:
-        raise ValueError(f"Model '{model_name}' is not recognized. Please choose 'RandomForest', 'XGBoost', or 'LightGBM'.")
 
-    model.fit(X_train, y_train)
-
-    return model
-
-input_train = input_train.replace([np.inf, -np.inf], np.nan)
-input_train = input_train.dropna()
-
-model_name = 'XGBoost'
-# model_name = 'RandomForest'
-# model_name = 'LightGBM'
-model = get_ML_model(model_name, input_train, target_train)
+# Fit the model
+model.fit(input_train, target_train, verbose=True)
 
 
 #%%
@@ -472,4 +288,13 @@ r2 = r2_score(target_test, target_pred)
 
 print(f"Mean Squared Error: {mse:.4f}")
 print(f"R-Squared: {r2:.4f}")
-# %%
+
+plt.figure(figsize=(10, 6))
+plt.plot(target_test.index, target_test, label='Actual', alpha=0.8)
+plt.plot(target_test.index, target_pred, label='Predicted', alpha=0.8)
+plt.legend()
+plt.title('Actual vs Predicted Next Day Return')
+plt.xlabel('Index')
+plt.ylabel('Next Day Return')
+plt.show()
+
