@@ -7,9 +7,9 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.4
+#       jupytext_version: 1.11.2
 #   kernelspec:
-#     display_name: Python 3 (ipykernel)
+#     display_name: Python 3
 #     language: python
 #     name: python3
 # ---
@@ -35,6 +35,7 @@ import xgboost as xgb
 from sklearn.ensemble import RandomForestRegressor
 import lightgbm as lgb
 import numpy as np
+import joblib
 
 # COMMON CONSTANTS
 CUTOFF_DATE = "2004-11-26"
@@ -124,7 +125,7 @@ data.drop_duplicates(subset='sector')
 #Convert every date to datetime
 data['Date'] = pd.to_datetime(data['Date'], utc=True)
 
-#%%
+# %%
 ## Add timeframe features
 
 data['Quarter'] = data['Date'].dt.quarter
@@ -132,7 +133,7 @@ data['week_number'] = data['Date'].dt.isocalendar().week
 data['week_day'] = data['Date'].dt.weekday
 data['Month']  = data['Date'].dt.month
 
-#%%
+# %%
 ## Calculate new features
 data["Daily Range"] = data["High"] - data["Low"]
 data["Direction"] = (data["Close"] > data["Open"]).astype(int)
@@ -152,7 +153,7 @@ data['Next Week Return'] = data['Daily Return'].shift(-7)
 data['Next Month Return'] = data['Daily Return'].shift(-30)
 
 data.info()
-#%%
+# %%
 
 ALPHAVANTAGE_API_URL = f"https://www.alphavantage.co/query?function=CPI&interval=monthly&apikey={api_key}"
 file_path = 'datasets/economic_indicators/cpi.json'
@@ -350,29 +351,29 @@ def get_quarterly_gdp_per_capita_from_quarter(row):
 
 data['REAL_GDP_PER_CAPITA'] = data.apply(get_quarterly_gdp_per_capita_from_quarter, axis=1)
 
+
 # %% [markdown]
 # #### 3.1.6. Future and Past Returns
-
+#
 # Ensure the data is sorted by symbol (company) and date
-df = df.sort_values(['Symbol', 'Date']).reset_index(drop=True)
-
-def calculate_returns(group):
-
-    group['Daily Return'] = group['Close'].pct_change()
-
-    group['Next Day Return'] = group['Daily Return'].shift(-1) * 100  # Next day
-
-    group['7-Day Return'] = (group['Close'] / group['Close'].shift(7) - 1) * 100  # Last 7 days
-    group['1-Month Return'] = (group['Close'] / group['Close'].shift(30) - 1) * 100  # Last 30 days
-    group['1-Year Return'] = (group['Close'] / group['Close'].shift(365) - 1) * 100  # Last 365 days
-    
-    return group
-
+# df = df.sort_values(['Symbol', 'Date']).reset_index(drop=True)
+#
+# def calculate_returns(group):
+#
+#     group['Daily Return'] = group['Close'].pct_change()
+#
+#     group['Next Day Return'] = group['Daily Return'].shift(-1) * 100  # Next day
+#
+#     group['7-Day Return'] = (group['Close'] / group['Close'].shift(7) - 1) * 100  # Last 7 days
+#     group['1-Month Return'] = (group['Close'] / group['Close'].shift(30) - 1) * 100  # Last 30 days
+#     group['1-Year Return'] = (group['Close'] / group['Close'].shift(365) - 1) * 100  # Last 365 days
+#     
+#     return group
+#
 # Apply the function to each company group
-df = df.groupby('Symbol', group_keys=False).apply(calculate_returns).reset_index(drop=True)
+# df = df.groupby('Symbol', group_keys=False).apply(calculate_returns).reset_index(drop=True)
 
-
-#%%
+# %%
 # Correlation Matrix
 def get_correlation_matrix():
     correlation_matrix = data.corr()
@@ -383,7 +384,7 @@ def get_correlation_matrix():
 
 # get_correlation_matrix()
 
-#%%
+# %%
 # Remove outliers~
 
 data['Z-Score'] = (data['Daily Return'] - data['Daily Return'].mean()) / data['Daily Return'].std()
@@ -391,7 +392,7 @@ data_no_outliers = data[(data['Z-Score'] >= -2.5) & (data['Z-Score'] <= 2.5)]
 data_no_outliers = data_no_outliers.drop(columns=['Z-Score'])
 data = data_no_outliers
 
-#%%
+# %%
 # Ensure there are no missing values before defining features and target
 data = data.dropna()  # Ensure there are no missing values
 
@@ -415,7 +416,7 @@ if len(inputData) != len(targetVariable):
 # Split the data into training and testing sets
 input_train, input_test, target_train, target_test = train_test_split(inputData, targetVariable, test_size=0.2, random_state=42, shuffle=False)
 
-#%%
+# %%
 # Define models to use
 def get_ML_model(model_name, X_train, y_train):
     if model_name == 'RandomForest':
@@ -463,7 +464,7 @@ model_name = 'XGBoost'
 model = get_ML_model(model_name, input_train, target_train)
 
 
-#%%
+# %%
 # Predict on the test set
 target_pred = model.predict(input_test)
 
@@ -472,4 +473,8 @@ r2 = r2_score(target_test, target_pred)
 
 print(f"Mean Squared Error: {mse:.4f}")
 print(f"R-Squared: {r2:.4f}")
+# %% [markdown]
+# ## 4. Save Model
+
 # %%
+joblib.dump(model, '../models/stocks_model.pkl')
