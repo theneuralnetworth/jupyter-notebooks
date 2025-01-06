@@ -82,7 +82,6 @@ files = list(filter(is_sp500, files))
 print(f"Filtered down to {len(files)} files")
 
 # Merge all the files into a single dataframe
-# Merge all the files into a single dataframe
 dataframes = []
 
 for f in files:
@@ -124,6 +123,14 @@ data["Direction"] = (data["Close"] > data["Open"]).astype(int)
 data["Percentage Change"] = ((data["Close"] - data["Open"]) / data["Open"]) * 100
 data["Momentum_10"] = data["Close"] - data["Close"].shift(10)
 data['Volume Change'] = data['Volume'].pct_change() * 100
+
+# Simple Moving Average (SMA)
+data["SMA_5"] = data["Close"].rolling(window=5).mean()
+data["SMA_20"] = data["Close"].rolling(window=20).mean()
+
+# Exponential Moving Average (EMA)
+data["EMA_5"] = data["Close"].ewm(span=5, adjust=False).mean()
+data["EMA_20"] = data["Close"].ewm(span=20, adjust=False).mean()
 
 # Remove rows where Volume Change is infinite
 data = data[~np.isinf(data['Volume Change'])]
