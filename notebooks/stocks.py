@@ -7,9 +7,9 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.4
+#       jupytext_version: 1.11.2
 #   kernelspec:
-#     display_name: Python 3 (ipykernel)
+#     display_name: Python 3
 #     language: python
 #     name: python3
 # ---
@@ -35,6 +35,7 @@ import xgboost as xgb
 from sklearn.ensemble import RandomForestRegressor
 import lightgbm as lgb
 import numpy as np
+import joblib
 
 # COMMON CONSTANTS
 CUTOFF_DATE = "2004-11-26"
@@ -108,7 +109,7 @@ print("One-hot encoded columns:", [col for col in data.columns if col.startswith
 #Convert every date to datetime
 data['Date'] = pd.to_datetime(data['Date'], utc=True)
 
-#%%
+# %%
 ## Add timeframe features
 
 data['Quarter'] = data['Date'].dt.quarter
@@ -116,7 +117,7 @@ data['week_number'] = data['Date'].dt.isocalendar().week
 data['week_day'] = data['Date'].dt.weekday
 data['Month']  = data['Date'].dt.month
 
-#%%
+# %%
 ## Calculate new features
 data["Daily Range"] = data["High"] - data["Low"]
 data["Direction"] = (data["Close"] > data["Open"]).astype(int)
@@ -241,7 +242,7 @@ data_no_outliers = data[(data['Z-Score'] >= -2.5) & (data['Z-Score'] <= 2.5)]
 data_no_outliers = data_no_outliers.drop(columns=['Z-Score'])
 data = data_no_outliers
 
-#%%
+# %%
 # Ensure there are no missing values before defining features and target
 data = data.dropna()  # Ensure there are no missing values
 data.drop(columns="Symbol")
@@ -279,7 +280,7 @@ model = xgb.XGBRegressor(
 model.fit(input_train, target_train, verbose=True)
 
 
-#%%
+# %%
 # Predict on the test set
 target_pred = model.predict(input_test)
 
@@ -298,3 +299,8 @@ plt.xlabel('Index')
 plt.ylabel('Next Day Return')
 plt.show()
 
+# %% [markdown]
+# ## 4. Save Model
+
+# %%
+joblib.dump(model, '../models/stocks_model.pkl')
