@@ -4,3 +4,4 @@
 notebooks/datasets/stocks.csv
 .DS_Store
 __pycache__
+*.pkl

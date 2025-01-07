@@ -190,46 +190,49 @@ if data['Inflation'].isnull().any():
     print("Found NaNs in 'Inflation' column after conversion. Filling with a default value (e.g., median).")
     data['Inflation'].fillna(data['Inflation'].median(), inplace=True)
 
-
 # %% [markdown]
-# ALPHAVANTAGE_API_URL = f"https://www.alphavantage.co/query?function=FEDERAL_FUNDS_RATE&interval=monthly&apikey=${api_key}"
-# file_path = 'datasets/economic_indicators/interest_rates.json'
-#
-# folder_path = os.path.dirname(file_path)
-# if not os.path.exists(folder_path):
-#     os.makedirs(folder_path)
-#
-# def get_interest_rates():
-#     response = requests.get(ALPHAVANTAGE_API_URL)
-#     data = response.json()
-#     rates = data['data']
-#     return [{"date": rate['date'], "value": float(rate['value'])} for rate in rates]
-#
-# if use_local_files and os.path.exists(file_path):
-#     with open(file_path, mode='r') as fp:
-#         rates = json.load(fp)
-# else:
-#     rates = get_interest_rates()
-#     with open(file_path, mode='w') as fp:
-#         json.dump(rates, fp)
-#
-# rates_df = pd.DataFrame(rates)
-#
-# data['Date'] = pd.to_datetime(data['Date'])
-# data['Year'] = data['Date'].dt.year
-# data['Month'] = data['Date'].dt.month
-#
-# rates_df['date'] = pd.to_datetime(rates_df['date'])
-# rates_df['Year'] = rates_df['date'].dt.year
-# rates_df['Month'] = rates_df['date'].dt.month
-#
-# df_merged = pd.merge(data, rates_df, on=['Year', 'Month'], how='inner')
-#
-# df_merged.drop(columns=['date', 'Year', 'Month'], inplace=True)
-# df_merged.rename(columns={'value': 'Interest Rate'}, inplace=True)
-#
-# df_merged['Interest Rate'] = df_merged['Interest Rate'] / 100
-# data['Interest Rate'] = df_merged['Interest Rate']
+# ### Interest Rates
+
+# %%
+ALPHAVANTAGE_API_URL = f"https://www.alphavantage.co/query?function=FEDERAL_FUNDS_RATE&interval=monthly&apikey=${api_key}"
+file_path = 'datasets/economic_indicators/interest_rates.json'
+
+folder_path = os.path.dirname(file_path)
+if not os.path.exists(folder_path):
+    os.makedirs(folder_path)
+
+def get_interest_rates():
+    response = requests.get(ALPHAVANTAGE_API_URL)
+    data = response.json()
+    rates = data['data']
+    return [{"date": rate['date'], "value": float(rate['value'])} for rate in rates]
+
+if use_local_files and os.path.exists(file_path):
+    with open(file_path, mode='r') as fp:
+        rates = json.load(fp)
+else:
+    rates = get_interest_rates()
+    with open(file_path, mode='w') as fp:
+        json.dump(rates, fp)
+
+rates_df = pd.DataFrame(rates)
+
+data['Date'] = pd.to_datetime(data['Date'])
+data['Year'] = data['Date'].dt.year
+data['Month'] = data['Date'].dt.month
+
+rates_df['date'] = pd.to_datetime(rates_df['date'])
+rates_df['Year'] = rates_df['date'].dt.year
+rates_df['Month'] = rates_df['date'].dt.month
+
+df_merged = pd.merge(data, rates_df, on=['Year', 'Month'], how='inner')
+
+df_merged.drop(columns=['date', 'Year', 'Month'], inplace=True)
+df_merged.rename(columns={'value': 'Interest Rate'}, inplace=True)
+
+df_merged['Interest Rate'] = df_merged['Interest Rate'] / 100
+data['Interest Rate'] = df_merged['Interest Rate']
+
 
 # %%
 # Correlation Matrix
@@ -310,4 +313,8 @@ plt.show()
 # ## 4. Save Model
 
 # %%
-joblib.dump(model, '../models/stocks_model.pkl')
+model_file = os.path.abspath('../models/stocks_model.pkl')
+joblib.dump(model, model_file)
+print(f"Model saved to {model_file}")
+
+# %%
