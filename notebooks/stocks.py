@@ -25,6 +25,7 @@ import pandas as pd
 import json
 from dotenv import load_dotenv
 import kagglehub
+import os
 import matplotlib.pyplot as plt
 import requests
 import seaborn as sns
@@ -59,8 +60,7 @@ use_local_files = os.getenv('USE_LOCAL_FILES', 'true').lower() == 'true'
 # %%
 
 # KaggleHub won't download the dataset again if it already exists
-directory = kagglehub.dataset_download(
-    "benjaminpo/s-and-p-500-with-dividends-and-splits-daily-updated")
+directory = kagglehub.dataset_download("benjaminpo/s-and-p-500-with-dividends-and-splits-daily-updated")
 
 files = []
 for dirname, _, filenames in os.walk(directory):
@@ -69,19 +69,14 @@ for dirname, _, filenames in os.walk(directory):
 
 print(f"Downloaded {len(files)} files")
 
-sp500_symbols = pd.read_csv(os.path.join(
-    os.path.dirname(__file__), 'datasets', 'sp500.csv'))
-sp500_symbols = sp500_symbols.rename(
-    columns={'Symbol': 'Symbol', 'GICS Sector': 'Sector'})
+sp500_symbols = pd.read_csv(os.path.join(os.getcwd(), 'datasets', 'sp500.csv'))
+sp500_symbols = sp500_symbols.rename(columns={'Symbol': 'Symbol', 'GICS Sector': 'Sector'})
 
 sp500_info = sp500_symbols[['Symbol', 'Sector']]
-
-
 def is_sp500(filename):
     """Check if the filename is a SP500 stock"""
     symbol = os.path.basename(filename).split('.')[0]
     return symbol in sp500_info['Symbol'].values
-
 
 files = list(filter(is_sp500, files))
 print(f"Filtered down to {len(files)} files")
@@ -107,27 +102,25 @@ print("Saving the dataset to ", STOCKS_DATASET)
 if not os.path.exists(STOCKS_DATASET) or input(f"Overwrite {STOCKS_DATASET}? [y/n] ").lower() == 'y':
     data.to_csv(STOCKS_DATASET, index=False)
 
-print("One-hot encoded columns:",
-      [col for col in data.columns if col.startswith('Sector_')])
+print("One-hot encoded columns:", [col for col in data.columns if col.startswith('Sector_')])
 
 # %%
-# Convert every date to datetime
+#Convert every date to datetime
 data['Date'] = pd.to_datetime(data['Date'], utc=True)
 
 # %%
-# Add timeframe features
+## Add timeframe features
 
 data['Quarter'] = data['Date'].dt.quarter
 data['week_number'] = data['Date'].dt.isocalendar().week
 data['week_day'] = data['Date'].dt.weekday
-data['Month'] = data['Date'].dt.month
+data['Month']  = data['Date'].dt.month
 
 # %%
-# Calculate new features
+## Calculate new features
 data["Daily Range"] = data["High"] - data["Low"]
 data["Direction"] = (data["Close"] > data["Open"]).astype(int)
-data["Percentage Change"] = (
-    (data["Close"] - data["Open"]) / data["Open"]) * 100
+data["Percentage Change"] = ((data["Close"] - data["Open"]) / data["Open"]) * 100
 data["Momentum_10"] = data["Close"] - data["Close"].shift(10)
 data['Volume Change'] = data['Volume'].pct_change() * 100
 
@@ -144,7 +137,7 @@ data = data[~np.isinf(data['Volume Change'])]
 
 # Daily Return
 data['Last Week Return'] = (data['Close'] / data['Close'].shift(7) - 1) * 100
-# Future daily return (target)
+#Future daily return (target)
 data['Daily Return'] = data['Close'].pct_change()
 data['Next Day Return'] = data['Daily Return'].shift(-1) * 100
 
@@ -161,13 +154,11 @@ folder_path = os.path.dirname(file_path)
 if not os.path.exists(folder_path):
     os.makedirs(folder_path)
 
-
 def get_inflation():
     response = requests.get(ALPHAVANTAGE_API_URL)
     data = response.json()
     data_inflation = data['data']
     return [{"date": inflation['date'], "value": float(inflation['value'])} for inflation in data_inflation]
-
 
 if use_local_files and os.path.exists(file_path):
     with open(file_path, mode='r') as fp:
@@ -178,8 +169,7 @@ else:
         json.dump(data_inflation, fp)
 
 # Create a mapping of inflation values by year
-inflation_mapping = {item['date'][:4]: float(
-    item['value']) for item in data_inflation}
+inflation_mapping = {item['date'][:4]: float(item['value']) for item in data_inflation}
 # Add inflation value for 2024
 inflation_mapping['2024'] = 2.6
 
@@ -246,18 +236,15 @@ if data['Inflation'].isnull().any():
 def get_correlation_matrix():
     correlation_matrix = data.corr()
     plt.figure(figsize=(12, 10))
-    sns.heatmap(correlation_matrix, annot=True, fmt=".2f",
-                cmap='coolwarm', square=True, cbar_kws={"shrink": .8})
+    sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap='coolwarm', square=True, cbar_kws={"shrink": .8})
     plt.title('Correlation Matrix')
     plt.show()
 
 # get_correlation_matrix()
 
-
 # %%
 # Remove outliers
-data['Z-Score'] = (data['Daily Return'] -
-                   data['Daily Return'].mean()) / data['Daily Return'].std()
+data['Z-Score'] = (data['Daily Return'] - data['Daily Return'].mean()) / data['Daily Return'].std()
 data_no_outliers = data[(data['Z-Score'] >= -2.5) & (data['Z-Score'] <= 2.5)]
 data_no_outliers = data_no_outliers.drop(columns=['Z-Score'])
 data = data_no_outliers
@@ -273,7 +260,7 @@ data.round(4)
 # Define targets and features
 target = 'Next Day Return'
 features = [
-    'Adj Close', 'Close', 'High', 'Low', 'Open', 'Direction', 'Quarter', 'week_number', 'week_day', 'Inflation', 'Interest Rate', 'Daily Range', 'Volume', 'Momentum_10', 'Volume Change', 'Percentage Change', 'Last Week Return', 'Daily Return', 'Sector_Communication Services', 'Sector_Consumer Discretionary', 'Sector_Consumer Staples', 'Sector_Energy', 'Sector_Financials', 'Sector_Health Care', 'Sector_Industrials',
+    'Adj Close', 'Close', 'High', 'Low','Open', 'Direction', 'Quarter', 'week_number', 'week_day', 'Inflation', 'Interest Rate', 'Daily Range', 'Volume', 'Momentum_10', 'Volume Change', 'Percentage Change', 'Last Week Return', 'Daily Return', 'Sector_Communication Services', 'Sector_Consumer Discretionary', 'Sector_Consumer Staples', 'Sector_Energy', 'Sector_Financials', 'Sector_Health Care', 'Sector_Industrials',
     'Sector_Information Technology', 'Sector_Materials',
     'Sector_Real Estate', 'Sector_Utilities'
 ]
@@ -283,19 +270,18 @@ inputData = data[features]
 targetVariable = data[target]
 
 # Split the data into training and testing sets
-input_train, input_test, target_train, target_test = train_test_split(
-    inputData, targetVariable, test_size=0.2, random_state=42, shuffle=False)
+input_train, input_test, target_train, target_test = train_test_split(inputData, targetVariable, test_size=0.2, random_state=42, shuffle=False)
 
 # %%
 # Get the model
 model_name = 'XGBoost'
 model = xgb.XGBRegressor(
-    n_estimators=100,
-    learning_rate=0.05,
-    objective='reg:squarederror',
-    random_state=42,
-    booster="gbtree"
-)
+            n_estimators=100,
+            learning_rate=0.05,
+            objective='reg:squarederror',
+            random_state=42,
+            booster="gbtree"
+        )
 
 # Fit the model
 model.fit(input_train, target_train, verbose=True)
