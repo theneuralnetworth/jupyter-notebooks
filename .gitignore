@@ -3,3 +3,4 @@
 .env
 notebooks/datasets/stocks.csv
 .DS_Store
+__pycache__
