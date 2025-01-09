@@ -16,9 +16,13 @@
 
 # %% [markdown]
 # # Stock Price Prediction System
-# #### Team 1: Neural Networth
+#
+# ## Imports
 
 # %%
+# Ignore pandas warnings
+import warnings
+warnings.filterwarnings('ignore')
 # Imports
 import os
 import pandas as pd
@@ -47,7 +51,7 @@ api_key = os.getenv('ALPHA_VANTAGE_API_KEY')
 use_local_files = os.getenv('USE_LOCAL_FILES', 'true').lower() == 'true'
 
 # %% [markdown]
-# ## 1. Get the dataset
+# ## Prepare the dataset
 #
 # In this section, we download the dataset from Kaggle that contains many files. We then merge all these files into a single dataset for further analysis.
 #
@@ -56,6 +60,9 @@ use_local_files = os.getenv('USE_LOCAL_FILES', 'true').lower() == 'true'
 # 1. Excludes records older than `CUTOFF_DATE` (default: 2004-11-26)
 # 1. Merges all the files into a single dataset
 # 1. Stores the dataset in the `STOCKS_DATASET` (default: `datasets/stocks.csv`) file
+
+# %% [markdown]
+# ### Merge all files into single dataset
 
 # %%
 
@@ -99,25 +106,34 @@ data = pd.get_dummies(data, columns=['Sector'], prefix='Sector')
 
 # Save the dataframe
 print("Saving the dataset to ", STOCKS_DATASET)
-if not os.path.exists(STOCKS_DATASET) or input(f"Overwrite {STOCKS_DATASET}? [y/n] ").lower() == 'y':
+if not os.path.exists(STOCKS_DATASET) or input(f"Overwrite {STOCKS_DATASET}? [Y/n] ").strip().lower() in {'y', ''}:
     data.to_csv(STOCKS_DATASET, index=False)
 
 print("One-hot encoded columns:", [col for col in data.columns if col.startswith('Sector_')])
+
+# %% [markdown]
+# ### Adding new features
+#
+# #### Timeframe features
 
 # %%
 #Convert every date to datetime
 data['Date'] = pd.to_datetime(data['Date'], utc=True)
 
-# %%
 ## Add timeframe features
-
 data['Quarter'] = data['Date'].dt.quarter
 data['week_number'] = data['Date'].dt.isocalendar().week
 data['week_day'] = data['Date'].dt.weekday
 data['Month']  = data['Date'].dt.month
 
+# %% [markdown]
+# #### Technical indicators features
+# Features like:
+# * daily range, direction, percentage change, ...
+# * moving averages, RSI, MACD, ...
+
 # %%
-## Calculate new features
+## Calculate technical indicators
 data["Daily Range"] = data["High"] - data["Low"]
 data["Direction"] = (data["Close"] > data["Open"]).astype(int)
 data["Percentage Change"] = ((data["Close"] - data["Open"]) / data["Open"]) * 100
@@ -141,10 +157,10 @@ data['Last Week Return'] = (data['Close'] / data['Close'].shift(7) - 1) * 100
 data['Daily Return'] = data['Close'].pct_change()
 data['Next Day Return'] = data['Daily Return'].shift(-1) * 100
 
-data.info()
+#data.info()
 
 # %% [markdown]
-# #### 3.1.2 Inflation
+# #### Inflation
 
 # %%
 ALPHAVANTAGE_API_URL = f"https://www.alphavantage.co/query?function=INFLATION&apikey={api_key}"
@@ -187,37 +203,47 @@ data['Inflation'] = pd.to_numeric(data['Inflation'], errors='coerce')
 
 # Check for NaNs in the column after conversion
 if data['Inflation'].isnull().any():
-    print("Found NaNs in 'Inflation' column after conversion. Filling with a default value (e.g., median).")
+    print("Found NaNs in 'Inflation' column after conversion. Filling with a default value (ie. median).")
     data['Inflation'].fillna(data['Inflation'].median(), inplace=True)
 
+
+# %% [markdown]
+# ### Correlation Matrix (numeric features only)
 
 # %%
 # Correlation Matrix
 def get_correlation_matrix():
-    correlation_matrix = data.corr()
+    numeric_columns = data.select_dtypes(include=[float, int])
+    correlation_matrix = numeric_columns.corr()
     plt.figure(figsize=(12, 10))
     sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap='coolwarm', square=True, cbar_kws={"shrink": .8})
     plt.title('Correlation Matrix')
     plt.show()
 
-# get_correlation_matrix()
+get_correlation_matrix()
+
+# %% [markdown]
+# ### Remove Outliers
 
 # %%
-# Remove outliers
 data['Z-Score'] = (data['Daily Return'] - data['Daily Return'].mean()) / data['Daily Return'].std()
 data_no_outliers = data[(data['Z-Score'] >= -2.5) & (data['Z-Score'] <= 2.5)]
 data_no_outliers = data_no_outliers.drop(columns=['Z-Score'])
 data = data_no_outliers
 
+# %% [markdown]
+# ### Drop missing values
+
 # %%
 # Ensure there are no missing values before defining features and target
 data = data.dropna()  # Ensure there are no missing values
 data.drop(columns="Symbol")
-data.info()
-data.round(4)
+data = data.round(4)
+
+# %% [markdown]
+# ### Define targets and features
 
 # %%
-# Define targets and features
 target = 'Next Day Return'
 features = [
     'Adj Close', 'Close', 'High', 'Low',
@@ -231,8 +257,10 @@ features = [
     'Sector_Industrials', 'Sector_Information Technology',
     'Sector_Materials', 'Sector_Real Estate', 'Sector_Utilities'
 ]
+# %% [markdown]
+# ### Split test and train data
+
 # %%
-# Prepare the input data
 inputData = data[features]
 targetVariable = data[target]
 
@@ -240,8 +268,42 @@ targetVariable = data[target]
 input_train, input_test, target_train, target_test = train_test_split(inputData, targetVariable, test_size=0.2, random_state=42, shuffle=False)
 
 # %%
-# Get the model
-model_name = 'XGBoost'
+from typing import Union
+def predict(model, test_data, test_target, target_feature='Next Day Return') -> Union[float, float]:
+    """A reusable function to test data and a model and predicts the target feature. It then prints our the following metrics:
+    - Squared Mean Squared Error
+    - Coefficient of Determination (R2)
+
+    Args:
+        model (_type_): the model used to predict
+        test_data (_type_): the test data to predict
+        test_target (_type_): the target data to predict
+        target_feature (str, optional): The name of the target feature. Defaults to 'Next Day Return'.
+    Returns:
+        float, float: The Squared Mean Squared Error and Coefficient of Determination (R2)
+    """
+    # Predict on the test set
+    prediction = model.predict(test_data)
+
+    rmse = np.sqrt(mean_squared_error(test_target, prediction))
+    r2 = r2_score(test_target, prediction)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(test_target.index, test_target, label='Actual', alpha=0.8)
+    plt.plot(test_target.index, prediction, label='Predicted', alpha=0.8)
+    plt.legend()
+    plt.title(f'Actual vs Predicted {target_feature}')
+    plt.xlabel('Index')
+    plt.ylabel(target_feature)
+    plt.show()
+
+    return rmse, r2
+
+
+# %% [markdown]
+# ## Train XGBoost model
+
+# %%
 model = xgb.XGBRegressor(
             n_estimators=100,
             learning_rate=0.05,
@@ -256,27 +318,65 @@ model.fit(input_train, target_train, verbose=True)
 
 # %%
 # Predict on the test set
-target_pred = model.predict(input_test)
-
-mse = mean_squared_error(target_test, target_pred)
-r2 = r2_score(target_test, target_pred)
-
-print(f"Mean Squared Error: {mse:.4f}")
-print(f"R-Squared: {r2:.4f}")
-
-plt.figure(figsize=(10, 6))
-plt.plot(target_test.index, target_test, label='Actual', alpha=0.8)
-plt.plot(target_test.index, target_pred, label='Predicted', alpha=0.8)
-plt.legend()
-plt.title('Actual vs Predicted Next Day Return')
-plt.xlabel('Index')
-plt.ylabel('Next Day Return')
-plt.show()
+unoptimized_rmse, unoptimized_r2 = predict(model, input_test, target_test)
+print("RMSE:", unoptimized_rmse)
+print("R2:", unoptimized_r2)
 
 # %% [markdown]
-# ## 4. Save Model
+# ### Save model to file
 
 # %%
 model_file = os.path.abspath('../models/stocks_model.pkl')
 joblib.dump(model, model_file)
 print(f"Model saved to {model_file}")
+
+# %% [markdown]
+# ### Randomized Hyperparameter tunning
+#
+# Uses RandomizedSearchCV to find the best hyperparameters for the XGBoost model.
+
+# %%
+from sklearn.model_selection import RandomizedSearchCV
+from scipy.stats import uniform, randint
+
+param_distributions = {
+    'n_estimators': randint(100, 1001), # extended range for more exploration
+    'max_depth': randint(2, 11), # shallower trees
+    'learning_rate': uniform(0.01, 0.19), # focus on smaller values for better generalization
+    'subsample': uniform(0.6, 0.4), # smaller values to prevent overfitting
+    'colsample_bytree': uniform(0.5, 0.5),
+    'reg_alpha': uniform(0, 1),
+    'reg_lambda': uniform(0.1, 4)
+}
+
+random_search = RandomizedSearchCV(
+    estimator=model,
+    param_distributions=param_distributions,
+    scoring='neg_mean_squared_error',
+    cv=5,
+    verbose=0,
+    n_jobs=-1,
+    n_iter=200,
+    random_state=42,
+    refit=True, # ---> This will refit the model, so we don't have to do it manually
+    return_train_score=False,
+    error_score='raise'
+)
+
+random_search.fit(input_train, target_train)
+
+print("Best parameters found: ", random_search.best_params_)
+print("Best cross-validation score: ", np.sqrt(-random_search.best_score_))
+
+best_model = random_search.best_estimator_
+y_pred = best_model.predict(input_test)
+test_rmse = np.sqrt(mean_squared_error(target_test, y_pred))
+print("Test RMSE:", test_rmse)
+
+# %%
+# Predict on the test set
+optimized_rsme, optimized_r2 = predict(best_model, input_test, target_test)
+print(f"RMSE: {optimized_rsme:.4f}, diff: {optimized_rsme - unoptimized_rmse}")
+print(f"R2: {optimized_r2:.4f}, diff: {optimized_r2 - unoptimized_r2}")
+
+# %%
