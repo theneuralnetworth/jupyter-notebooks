@@ -335,4 +335,6 @@ print(f"Model saved to {model_file}")
 # ## 4. Save Model
 
 # %%
-joblib.dump(model, '../models/stocks_model.pkl')
+joblib.dump(model, './models/stocks_model.pkl')
+
+# %%
