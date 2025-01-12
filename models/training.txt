@@ -1,0 +1,10 @@
+Randomized Hyperparameter tunning:
+
+Best parameters found:  {'colsample_bytree': np.float64(0.8745808195506415), 'learning_rate': np.float64(0.03772519406667764), 'max_depth': 10, 'n_estimators': 145, 'reg_alpha': np.float64(0.14249554290151323), 'reg_lambda': np.float64(2.0955526138054243), 'subsample': np.float64(0.8472622937272476)}
+Best cross-validation score:  2.1297914017609054
+Test RMSE: 1.8323593423384263
+
+
+Prediction on test set:
+RMSE: 1.8324, diff: -0.08540926243454972
+R2: 0.2562, diff: 0.07095724866944342
