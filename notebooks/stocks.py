@@ -156,6 +156,7 @@ data['Last Week Return'] = (data['Close'] / data['Close'].shift(7) - 1) * 100
 #Future daily return (target)
 data['Daily Return'] = data['Close'].pct_change()
 data['Next Day Return'] = data['Daily Return'].shift(-1) * 100
+data['Next Week Return'] = (data['Close'] / data['Close'].shift(-7)) * 100
 
 #data.info()
 
@@ -331,52 +332,7 @@ joblib.dump(model, model_file)
 print(f"Model saved to {model_file}")
 
 # %% [markdown]
-# ### Randomized Hyperparameter tunning
-#
-# Uses RandomizedSearchCV to find the best hyperparameters for the XGBoost model.
+# ## 4. Save Model
 
 # %%
-from sklearn.model_selection import RandomizedSearchCV
-from scipy.stats import uniform, randint
-
-param_distributions = {
-    'n_estimators': randint(100, 1001), # extended range for more exploration
-    'max_depth': randint(2, 11), # shallower trees
-    'learning_rate': uniform(0.01, 0.19), # focus on smaller values for better generalization
-    'subsample': uniform(0.6, 0.4), # smaller values to prevent overfitting
-    'colsample_bytree': uniform(0.5, 0.5),
-    'reg_alpha': uniform(0, 1),
-    'reg_lambda': uniform(0.1, 4)
-}
-
-random_search = RandomizedSearchCV(
-    estimator=model,
-    param_distributions=param_distributions,
-    scoring='neg_mean_squared_error',
-    cv=5,
-    verbose=0,
-    n_jobs=-1,
-    n_iter=200,
-    random_state=42,
-    refit=True, # ---> This will refit the model, so we don't have to do it manually
-    return_train_score=False,
-    error_score='raise'
-)
-
-random_search.fit(input_train, target_train)
-
-print("Best parameters found: ", random_search.best_params_)
-print("Best cross-validation score: ", np.sqrt(-random_search.best_score_))
-
-best_model = random_search.best_estimator_
-y_pred = best_model.predict(input_test)
-test_rmse = np.sqrt(mean_squared_error(target_test, y_pred))
-print("Test RMSE:", test_rmse)
-
-# %%
-# Predict on the test set
-optimized_rsme, optimized_r2 = predict(best_model, input_test, target_test)
-print(f"RMSE: {optimized_rsme:.4f}, diff: {optimized_rsme - unoptimized_rmse}")
-print(f"R2: {optimized_r2:.4f}, diff: {optimized_r2 - unoptimized_r2}")
-
-# %%
+joblib.dump(model, '../models/stocks_model.pkl')
