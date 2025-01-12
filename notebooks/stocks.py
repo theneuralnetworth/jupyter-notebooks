@@ -133,6 +133,7 @@ data['Last Week Return'] = (data['Close'] / data['Close'].shift(7) - 1) * 100
 #Future daily return (target)
 data['Daily Return'] = data['Close'].pct_change()
 data['Next Day Return'] = data['Daily Return'].shift(-1) * 100
+data['Next Week Return'] = (data['Close'] / data['Close'].shift(-7)) * 100
 
 data.info()
 
@@ -255,7 +256,7 @@ target = 'Next Day Return'
 features = [
     'Adj Close', 'Close', 'High', 'Low','Open', 'Direction', 'Quarter', 'week_number', 'week_day', 'Inflation', 'Interest Rate', 'Daily Range', 'Volume', 'Momentum_10', 'Volume Change', 'Percentage Change', 'Last Week Return', 'Daily Return', 'Sector_Communication Services', 'Sector_Consumer Discretionary', 'Sector_Consumer Staples', 'Sector_Energy', 'Sector_Financials', 'Sector_Health Care', 'Sector_Industrials',
     'Sector_Information Technology', 'Sector_Materials',
-    'Sector_Real Estate', 'Sector_Utilities'
+    'Sector_Real Estate', 'Sector_Utilities',
 ]
 #%%
 # Prepare the input data
@@ -294,13 +295,15 @@ plt.figure(figsize=(10, 6))
 plt.plot(target_test.index, target_test, label='Actual', alpha=0.8)
 plt.plot(target_test.index, target_pred, label='Predicted', alpha=0.8)
 plt.legend()
-plt.title('Actual vs Predicted Next Day Return')
+plt.title(f'Actual vs Predicted {target}')
 plt.xlabel('Index')
-plt.ylabel('Next Day Return')
+plt.ylabel(f'{target}')
 plt.show()
 
 # %% [markdown]
 # ## 4. Save Model
 
 # %%
-joblib.dump(model, '../models/stocks_model.pkl')
+joblib.dump(model, './models/stocks_model.pkl')
+
+# %%
