@@ -15,7 +15,7 @@ model = joblib.load('./models/stocks_model.pkl')
 # Define the correct feature order that the model expects
 feature_order = [
     'Adj Close', 'Close', 'High', 'Low', 'Open', 'Direction', 'Quarter',
-    'week_number', 'week_day', 'Inflation', 'Interest Rate', 'Daily Range',
+    'week_number', 'week_day', 'Inflation', 'Daily Range',
     'Volume', 'Momentum_10', 'Volume Change', 'Percentage Change',
     'Last Week Return', 'Daily Return', 'Sector_Communication Services',
     'Sector_Consumer Discretionary', 'Sector_Consumer Staples', 'Sector_Energy',

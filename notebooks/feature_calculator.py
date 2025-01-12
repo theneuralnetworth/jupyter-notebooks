@@ -34,26 +34,6 @@ def get_inflation_data():
     
     return inflation_mapping
 
-def get_interest_rates():
-    """Fetch interest rates from Alpha Vantage or local file"""
-    file_path = 'datasets/economic_indicators/interest_rates.json'
-    
-    if os.path.exists(file_path):
-        with open(file_path, 'r') as fp:
-            rates = json.load(fp)
-    else:
-        url = f"https://www.alphavantage.co/query?function=FEDERAL_FUNDS_RATE&interval=monthly&apikey={api_key}"
-        response = requests.get(url)
-        data = response.json()
-        rates = data['data']
-        
-        # Save for future use
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, 'w') as fp:
-            json.dump(rates, fp)
-    
-    return pd.DataFrame(rates)
-
 def calculate_features(stock_data, sector):
     """
     Calculate all necessary features for the prediction model
@@ -67,7 +47,6 @@ def calculate_features(stock_data, sector):
     """
     # Get economic indicators
     inflation_mapping = get_inflation_data()
-    rates_df = get_interest_rates()
     
     # Convert date to datetime if it's not already
     date = pd.to_datetime(stock_data.get('Date', datetime.now()))
@@ -101,11 +80,6 @@ def calculate_features(stock_data, sector):
     # Add inflation
     year = str(date.year)
     features['Inflation'] = inflation_mapping.get(year, inflation_mapping['2024'])
-    
-    # Add interest rate (get closest date)
-    rates_df['date'] = pd.to_datetime(rates_df['date'])
-    closest_rate = rates_df.iloc[(rates_df['date'] - date).abs().argsort()[0]]
-    features['Interest Rate'] = float(closest_rate['value']) / 100
     
     # Add sector features (one-hot encoding)
     sectors = [
