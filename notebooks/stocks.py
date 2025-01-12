@@ -209,6 +209,7 @@ if data['Inflation'].isnull().any():
 
 
 # %% [markdown]
+# ## Feature importance analysis
 # ### Correlation Matrix (numeric features only)
 
 # %%
@@ -222,6 +223,29 @@ def get_correlation_matrix():
     plt.show()
 
 get_correlation_matrix()
+
+# %% [markdown]
+# #### High Correlation features
+
+# %%
+threshold = 0.8
+numeric_columns = data.select_dtypes(include=[float, int])
+corr_matrix = numeric_columns.corr()
+
+# Drop highly correlated features
+high_corr = corr_matrix.abs() > threshold
+upper_triangle = np.triu(np.ones(corr_matrix.shape), k=1)
+# Identify highly correlated features
+to_drop = []
+for i in range(corr_matrix.shape[0]):
+    for j in range(i + 1, corr_matrix.shape[1]):
+        if abs(corr_matrix.iloc[i, j]) > threshold:
+            # Add the column with the higher index to the drop list
+            to_drop.append(corr_matrix.columns[j])
+
+to_drop = list(set(to_drop))
+to_drop
+
 
 # %% [markdown]
 # ### Remove Outliers
@@ -262,11 +286,14 @@ features = [
 # ### Split test and train data
 
 # %%
-inputData = data[features]
-targetVariable = data[target]
+input_data = data[features]
+target_variable = data[target]
 
 # Split the data into training and testing sets
-input_train, input_test, target_train, target_test = train_test_split(inputData, targetVariable, test_size=0.2, random_state=42, shuffle=False)
+input_train, input_test, target_train, target_test = train_test_split(input_data, target_variable, test_size=0.2, random_state=42, shuffle=False)
+
+# %% [markdown]
+# Reusable functions
 
 # %%
 from typing import Union
@@ -302,7 +329,7 @@ def predict(model, test_data, test_target, target_feature='Next Day Return') -> 
 
 
 # %% [markdown]
-# ## Train XGBoost model
+# ## XGBoost
 
 # %%
 model = xgb.XGBRegressor(
@@ -317,19 +344,68 @@ model = xgb.XGBRegressor(
 model.fit(input_train, target_train, verbose=True)
 
 
+# %% [markdown]
+# ## Feature Importance
+# ### Feature importance analysis
+
+# %%
+importances = model.feature_importances_
+feature_importance_df = pd.DataFrame({'Feature': features, 'Importance': importances})
+feature_importance_df = feature_importance_df.sort_values('Importance', ascending=False)
+feature_importance_df
+
+# %% [markdown]
+# ### Permutation importance
+
+# %%
+from sklearn.inspection import permutation_importance
+
+X = pd.DataFrame(input_test, columns=features)
+result = permutation_importance(model, input_test, target_test, n_repeats=10, random_state=42)
+for i in result.importances_mean.argsort()[::-1]:
+    print(f"{X.columns[i]:<10} Importance: {result.importances_mean[i]:.4f}")
+
+
+# %% [markdown]
+# ### Recursive Feature Elimination
+
+# %%
+from sklearn.feature_selection import RFE
+from sklearn.ensemble import RandomForestRegressor
+
+rfe = RFE(estimator=model, n_features_to_select=5)  # Select top 5 features
+rfe.fit(input_train, target_train)
+
+# Get ranking of features
+print("Ranking")
+ranking = pd.DataFrame({'Feature': X.columns, 'Ranking': rfe.ranking_}).sort_values(by='Ranking')
+print(ranking)
+print("Support")
+support = pd.DataFrame({'Feature': X.columns, 'Support': rfe.support_}).sort_values(by='Support', ascending=False)
+print(support)
+
+# Transforms the dataset to include only selected features
+input_train_selected = rfe.transform(input_train)
+input_test_selected = rfe.transform(input_test)
+
+
 # %%
 # Predict on the test set
 unoptimized_rmse, unoptimized_r2 = predict(model, input_test, target_test)
 print("RMSE:", unoptimized_rmse)
 print("R2:", unoptimized_r2)
 
+
 # %% [markdown]
 # ### Save model to file
 
 # %%
-model_file = os.path.abspath('../models/stocks_model.pkl')
-joblib.dump(model, model_file)
-print(f"Model saved to {model_file}")
+def save_to_file(model, filepath: str):
+    model_file = os.path.abspath(filepath)
+    joblib.dump(model, model_file)
+    print(f"Model saved to {model_file}")
+
+save_to_file(model, '../models/stocks_model.pkl')
 
 # %% [markdown]
 # ### Randomized Hyperparameter tunning
