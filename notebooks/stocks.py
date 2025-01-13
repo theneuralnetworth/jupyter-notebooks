@@ -395,18 +395,6 @@ unoptimized_rmse, unoptimized_r2 = predict(model, input_test, target_test)
 print("RMSE:", unoptimized_rmse)
 print("R2:", unoptimized_r2)
 
-
-# %% [markdown]
-# ### Save model to file
-
-# %%
-def save_to_file(model, filepath: str):
-    model_file = os.path.abspath(filepath)
-    joblib.dump(model, model_file)
-    print(f"Model saved to {model_file}")
-
-save_to_file(model, '../models/stocks_model.pkl')
-
 # %% [markdown]
 # ### Randomized Hyperparameter tunning
 #
@@ -456,4 +444,14 @@ optimized_rsme, optimized_r2 = predict(best_model, input_test, target_test)
 print(f"RMSE: {optimized_rsme:.4f}, diff: {optimized_rsme - unoptimized_rmse}")
 print(f"R2: {optimized_r2:.4f}, diff: {optimized_r2 - unoptimized_r2}")
 
+
+# %% [markdown]
+# ### Save model to file
+
 # %%
+def save_to_file(model, filepath: str):
+    model_file = os.path.abspath(filepath)
+    joblib.dump(model, model_file)
+    print(f"Model saved to {model_file}")
+
+save_to_file(model, '../models/stocks_model.pkl')
