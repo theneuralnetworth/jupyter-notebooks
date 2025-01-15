@@ -218,8 +218,8 @@ if data['Inflation'].isnull().any():
 # #### Economic Indicators from FRED (Federal Reserve Economic Data) API
 
 # %%
-#api_key = 'fc61c0046f24fb037f982ee29ae1ab11'
-""" fred = Fred(api_key = fred_api_key)
+api_key = 'fc61c0046f24fb037f982ee29ae1ab11'
+fred = Fred(api_key = api_key)
 
 # List of economic indicators to fetch from FRED
 economic_indicators = ["DTB4WK", "DTB3", "DTB6", "DGS5", "DGS10", "DAAA", "DBAA"]
@@ -236,7 +236,7 @@ data['Date'] = data['Date'].dt.tz_localize(None)
 
 features_fred['Date'] = pd.to_datetime(features_fred['Date'])
 
-data = pd.merge(data, features_fred, on='Date', how='left') """
+data = pd.merge(data, features_fred, on='Date', how='left')
 
 # %% [markdown]
 # ## Feature importance analysis
