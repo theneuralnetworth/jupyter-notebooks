@@ -40,6 +40,7 @@ from sklearn.ensemble import RandomForestRegressor
 import lightgbm as lgb
 import numpy as np
 import joblib
+from fredapi import Fred
 
 # COMMON CONSTANTS
 CUTOFF_DATE = "2004-11-26"
@@ -48,6 +49,7 @@ STOCKS_DATASET = os.path.join(os.getcwd(), 'datasets', 'stocks.csv')
 # Load environment variables
 load_dotenv()
 api_key = os.getenv('ALPHA_VANTAGE_API_KEY')
+fred_api_key = os.getenv("FRED_API_KEY")
 use_local_files = os.getenv('USE_LOCAL_FILES', 'true').lower() == 'true'
 
 # %% [markdown]
@@ -137,6 +139,10 @@ data['Month']  = data['Date'].dt.month
 data["Daily Range"] = data["High"] - data["Low"]
 data["Direction"] = (data["Close"] > data["Open"]).astype(int)
 data["Percentage Change"] = ((data["Close"] - data["Open"]) / data["Open"]) * 100
+data["Momentum_2"] = data["Close"] - data["Close"].shift(2)
+data["Momentum_3"] = data["Close"] - data["Close"].shift(3)
+data["Momentum_4"] = data["Close"] - data["Close"].shift(4)
+data["Momentum_5"] = data["Close"] - data["Close"].shift(5)
 data["Momentum_10"] = data["Close"] - data["Close"].shift(10)
 data['Volume Change'] = data['Volume'].pct_change() * 100
 
@@ -207,6 +213,29 @@ if data['Inflation'].isnull().any():
     print("Found NaNs in 'Inflation' column after conversion. Filling with a default value (ie. median).")
     data['Inflation'].fillna(data['Inflation'].median(), inplace=True)
 
+# %% [markdown]
+# #### Economic Indicators from FRED (Federal Reserve Economic Data) API
+
+# %%
+#api_key = 'fc61c0046f24fb037f982ee29ae1ab11'
+""" fred = Fred(api_key = fred_api_key)
+
+# List of economic indicators to fetch from FRED
+economic_indicators = ["DTB4WK", "DTB3", "DTB6", "DGS5", "DGS10", "DAAA", "DBAA"]
+
+features_fred = pd.DataFrame()
+
+for indicator in economic_indicators :
+    series_data = fred.get_series(indicator)
+    series_data = series_data.reset_index()
+    series_data.columns = ['Date', indicator]
+    features_fred = pd.merge(features_fred, series_data, on='Date', how='outer') if not features_fred.empty else series_data
+
+data['Date'] = data['Date'].dt.tz_localize(None)
+
+features_fred['Date'] = pd.to_datetime(features_fred['Date'])
+
+data = pd.merge(data, features_fred, on='Date', how='left') """
 
 # %% [markdown]
 # ## Feature importance analysis
@@ -274,8 +303,8 @@ features = [
     'Adj Close', 'Close', 'High', 'Low',
     'Open', 'Direction', 'Quarter', 'week_number',
     'week_day', 'Inflation', 'Daily Range',
-    'Volume', 'Momentum_10', 'Volume Change',
-    'Percentage Change', 'Last Week Return',
+    'Volume', 'Momentum_2', 'Momentum_3', 'Momentum_4', 'Momentum_5',
+    'Volume Change', 'Percentage Change', 'Last Week Return',
     'Daily Return', 'Sector_Communication Services',
     'Sector_Consumer Discretionary', 'Sector_Consumer Staples',
     'Sector_Energy', 'Sector_Financials', 'Sector_Health Care',
