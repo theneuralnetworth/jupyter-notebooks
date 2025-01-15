@@ -36,7 +36,6 @@ import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 import xgboost as xgb
-from sklearn.ensemble import RandomForestRegressor
 import lightgbm as lgb
 import numpy as np
 import joblib
@@ -163,6 +162,8 @@ data['Last Week Return'] = (data['Close'] / data['Close'].shift(7) - 1) * 100
 data['Daily Return'] = data['Close'].pct_change()
 data['Next Day Return'] = data['Daily Return'].shift(-1) * 100
 data['Next Week Return'] = (data['Close'] / data['Close'].shift(-7)) * 100
+data['Next Month Return'] = (data['Close'] / data['Close'].shift(-30)) * 100
+data['Next Quarter Return'] = (data['Close'] / data['Close'].shift(-63)) * 100
 
 #data.info()
 
@@ -254,33 +255,15 @@ def get_correlation_matrix():
 get_correlation_matrix()
 
 # %% [markdown]
-# #### High Correlation features
-
-# %%
-threshold = 0.8
-numeric_columns = data.select_dtypes(include=[float, int])
-corr_matrix = numeric_columns.corr()
-
-# Drop highly correlated features
-high_corr = corr_matrix.abs() > threshold
-upper_triangle = np.triu(np.ones(corr_matrix.shape), k=1)
-# Identify highly correlated features
-to_drop = []
-for i in range(corr_matrix.shape[0]):
-    for j in range(i + 1, corr_matrix.shape[1]):
-        if abs(corr_matrix.iloc[i, j]) > threshold:
-            # Add the column with the higher index to the drop list
-            to_drop.append(corr_matrix.columns[j])
-
-to_drop = list(set(to_drop))
-to_drop
-
-
-# %% [markdown]
 # ### Remove Outliers
 
 # %%
 data['Z-Score'] = (data['Daily Return'] - data['Daily Return'].mean()) / data['Daily Return'].std()
+data_no_outliers = data[(data['Z-Score'] >= -2.5) & (data['Z-Score'] <= 2.5)]
+data_no_outliers = data_no_outliers.drop(columns=['Z-Score'])
+data = data_no_outliers
+
+data['Z-Score'] = (data['Next Month Return'] - data['Next Month Return'].mean()) / data['Next Month Return'].std()
 data_no_outliers = data[(data['Z-Score'] >= -2.5) & (data['Z-Score'] <= 2.5)]
 data_no_outliers = data_no_outliers.drop(columns=['Z-Score'])
 data = data_no_outliers
@@ -301,7 +284,7 @@ data = data.round(4)
 target = 'Next Day Return'
 features = [
     'Adj Close', 'Close', 'High', 'Low',
-    'Open', 'Direction', 'Quarter', 'week_number',
+    'Open', 'Direction', 'Month', 'Quarter', 'week_number',
     'week_day', 'Inflation', 'Daily Range',
     'Volume', 'Momentum_2', 'Momentum_3', 'Momentum_4', 'Momentum_5',
     'Volume Change', 'Percentage Change', 'Last Week Return',
@@ -395,29 +378,6 @@ for i in result.importances_mean.argsort()[::-1]:
     print(f"{X.columns[i]:<10} Importance: {result.importances_mean[i]:.4f}")
 
 
-# %% [markdown]
-# ### Recursive Feature Elimination
-
-# %%
-from sklearn.feature_selection import RFE
-from sklearn.ensemble import RandomForestRegressor
-
-rfe = RFE(estimator=model, n_features_to_select=5)  # Select top 5 features
-rfe.fit(input_train, target_train)
-
-# Get ranking of features
-print("Ranking")
-ranking = pd.DataFrame({'Feature': X.columns, 'Ranking': rfe.ranking_}).sort_values(by='Ranking')
-print(ranking)
-print("Support")
-support = pd.DataFrame({'Feature': X.columns, 'Support': rfe.support_}).sort_values(by='Support', ascending=False)
-print(support)
-
-# Transforms the dataset to include only selected features
-input_train_selected = rfe.transform(input_train)
-input_test_selected = rfe.transform(input_test)
-
-
 # %%
 # Predict on the test set
 unoptimized_rmse, unoptimized_r2 = predict(model, input_test, target_test)
@@ -430,7 +390,7 @@ print("R2:", unoptimized_r2)
 # Uses RandomizedSearchCV to find the best hyperparameters for the XGBoost model.
 
 # %%
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
 from scipy.stats import uniform, randint
 
 param_distributions = {
@@ -467,7 +427,6 @@ y_pred = best_model.predict(input_test)
 test_rmse = np.sqrt(mean_squared_error(target_test, y_pred))
 print("Test RMSE:", test_rmse)
 
-# %%
 # Predict on the test set
 optimized_rsme, optimized_r2 = predict(best_model, input_test, target_test)
 print(f"RMSE: {optimized_rsme:.4f}, diff: {optimized_rsme - unoptimized_rmse}")
@@ -483,4 +442,95 @@ def save_to_file(model, filepath: str):
     joblib.dump(model, model_file)
     print(f"Model saved to {model_file}")
 
+
 save_to_file(model, '../models/stocks_model.pkl')
+
+# %% [markdown]
+# ### Recursive Feature Elimination
+#
+# RFE actually made the model worse which means that the features that were removed were actually important.
+# We will keep RFE here but we will not use it in the final model.
+
+# %%
+from sklearn.feature_selection import RFE
+
+# rfe = RFE(estimator=model, n_features_to_select=10)
+# rfe.fit(input_train, target_train)
+
+# print("Selected features: ", rfe.support_)
+# print("Feature ranking: ", rfe.ranking_)
+
+# input_train_rfe = rfe.transform(input_train)
+# input_test_rfe = rfe.transform(input_test)
+
+# model.fit(input_train_rfe, target_train)
+
+# y_pred = model.predict(input_test_rfe)
+# rmse = np.sqrt(mean_squared_error(target_test, y_pred))
+# r2 = r2_score(target_test, y_pred)
+# print("RMSE: ", rmse)
+# print("R2: ", r2)
+
+# %% [markdown]
+# ### Optuna Hyperparameter tunning
+#
+# This is a more advanced hyperparameter tunning method that uses Bayesian optimization to find the best hyperparameters for the XGBoost model.
+
+# %% [markdown]
+# ## Random Forest
+
+# %%
+# import random forest regressor
+from sklearn.ensemble import RandomForestRegressor
+
+# create a random forest regressor
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+
+# fit the model
+model.fit(input_train, target_train)
+
+# predict on the test set
+unoptimized_rmse, unoptimized_r2 = predict(model, input_test, target_test)
+
+print("RMSE:", unoptimized_rmse)
+print("R2:", unoptimized_r2)
+
+param_distributions = {
+    'n_estimators': randint(100, 1001), # extended range for more exploration
+    'max_depth': randint(2, 11), # shallower trees
+    'min_samples_split': randint(2, 11), # smaller values to prevent overfitting
+    'min_samples_leaf': randint(1, 11), # smaller values to prevent overfitting
+    'max_features': randint(1, len(features)) # smaller values to prevent overfitting
+}
+
+random_search = RandomizedSearchCV(
+    estimator=model,
+    param_distributions=param_distributions,
+    scoring='neg_mean_squared_error',
+    cv=5,
+    verbose=0,
+    n_jobs=-1,
+    n_iter=2,
+    random_state=42,
+    refit=True, # ---> This will refit the model, so we don't have to do it manually
+    return_train_score=False,
+    error_score='raise'
+)
+
+random_search.fit(input_train, target_train)
+
+print("Best parameters found: ", random_search.best_params_)
+print("Best cross-validation score: ", np.sqrt(-random_search.best_score_))
+
+best_model = random_search.best_estimator_
+y_pred = best_model.predict(input_test)
+test_rmse = np.sqrt(mean_squared_error(target_test, y_pred))
+print("Test RMSE:", test_rmse)
+
+# Predict on the test set
+optimized_rsme, optimized_r2 = predict(best_model, input_test, target_test)
+print(f"RMSE: {optimized_rsme:.4f}, diff: {optimized_rsme - unoptimized_rmse}")
+print(f"R2: {optimized_r2:.4f}, diff: {optimized_r2 - unoptimized_r2}")
+
+
+# %%
