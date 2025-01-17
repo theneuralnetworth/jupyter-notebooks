@@ -23,14 +23,14 @@ def predict_stock_return(symbol):
     
     # Define the correct feature order
     feature_order = [
-        'Adj Close', 'Close', 'High', 'Low', 'Open', 'Direction', 'Quarter',
-        'week_number', 'week_day', 'Inflation', 'Daily Range',
-        'Volume', 'Momentum_10', 'Volume Change', 'Percentage Change',
-        'Last Week Return', 'Daily Return', 'Sector_Communication Services',
-        'Sector_Consumer Discretionary', 'Sector_Consumer Staples', 'Sector_Energy',
-        'Sector_Financials', 'Sector_Health Care', 'Sector_Industrials',
-        'Sector_Information Technology', 'Sector_Materials', 'Sector_Real Estate',
-        'Sector_Utilities'
+        'Adj Close', 'Close', 'High', 'Low', 'Open', 'Direction', 'Month', 'Quarter',
+        'week_number', 'week_day', 'Inflation', 'Daily Range', 'Volume',
+        'Momentum_2', 'Momentum_3', 'Momentum_4', 'Momentum_5',
+        'Volume Change', 'Percentage Change', 'Last Week Return', 'Daily Return',
+        'Sector_Communication Services', 'Sector_Consumer Discretionary',
+        'Sector_Consumer Staples', 'Sector_Energy', 'Sector_Financials',
+        'Sector_Health Care', 'Sector_Industrials', 'Sector_Information Technology',
+        'Sector_Materials', 'Sector_Real Estate', 'Sector_Utilities'
     ]
     
     # Convert to DataFrame and reorder columns

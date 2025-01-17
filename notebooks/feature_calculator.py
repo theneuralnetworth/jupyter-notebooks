@@ -10,9 +10,12 @@ from datetime import datetime
 load_dotenv()
 api_key = os.getenv('ALPHA_VANTAGE_API_KEY')
 
+# Get the base directory (parent of notebooks)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def get_inflation_data():
     """Fetch inflation data from Alpha Vantage or local file"""
-    file_path = 'datasets/economic_indicators/inflation.json'
+    file_path = os.path.join('datasets', 'economic_indicators', 'inflation.json')
     
     if os.path.exists(file_path):
         with open(file_path, 'r') as fp:
@@ -111,16 +114,41 @@ def calculate_features_with_history(stock_data_list, sector):
     current_data = stock_data_list[-1]
     features = calculate_features(current_data, sector)
     
-    # Calculate features that require historical data
-    if len(stock_data_list) > 10:
-        features['Momentum_10'] = float(current_data['Close']) - float(stock_data_list[-11]['Close'])
+    # Add Month feature that was missing
+    date = pd.to_datetime(current_data['Date'])
+    features['Month'] = date.month
     
+    # Calculate historical features
     if len(stock_data_list) > 1:
         prev_volume = float(stock_data_list[-2]['Volume'])
         features['Volume Change'] = ((float(current_data['Volume']) - prev_volume) / prev_volume) * 100
         
         prev_close = float(stock_data_list[-2]['Close'])
         features['Daily Return'] = ((float(current_data['Close']) - prev_close) / prev_close) * 100
+        
+        # Add Momentum_2
+        if len(stock_data_list) > 2:
+            features['Momentum_2'] = float(current_data['Close']) - float(stock_data_list[-3]['Close'])
+        else:
+            features['Momentum_2'] = 0.0
+            
+        # Add Momentum_3
+        if len(stock_data_list) > 3:
+            features['Momentum_3'] = float(current_data['Close']) - float(stock_data_list[-4]['Close'])
+        else:
+            features['Momentum_3'] = 0.0
+            
+        # Add Momentum_4
+        if len(stock_data_list) > 4:
+            features['Momentum_4'] = float(current_data['Close']) - float(stock_data_list[-5]['Close'])
+        else:
+            features['Momentum_4'] = 0.0
+            
+        # Add Momentum_5
+        if len(stock_data_list) > 5:
+            features['Momentum_5'] = float(current_data['Close']) - float(stock_data_list[-6]['Close'])
+        else:
+            features['Momentum_5'] = 0.0
     
     if len(stock_data_list) > 7:
         week_ago_close = float(stock_data_list[-8]['Close'])
@@ -130,16 +158,17 @@ def calculate_features_with_history(stock_data_list, sector):
 
 def get_stock_history(symbol):
     """
-    Get the last two days of stock data for a given symbol from stocks.csv
-    
-    Parameters:
-    symbol (str): The stock symbol (e.g., 'AAPL')
-    
-    Returns:
-    tuple: (list of historical data dicts, sector string)
+    Get all historical stock data for a given symbol from stocks.csv
     """
+    # Use the correct path for the CSV file
+    csv_path = os.path.join('datasets', 'stocks.csv')
+    print(f"Reading stock data from: {csv_path}")
+    
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(f"Stock data file not found at: {csv_path}")
+    
     # Read the CSV file
-    df = pd.read_csv('datasets/stocks.csv')
+    df = pd.read_csv(csv_path)
     
     # Convert date to datetime
     df['Date'] = pd.to_datetime(df['Date'])
@@ -153,12 +182,8 @@ def get_stock_history(symbol):
     # Get the sector
     sector = stock_data['Sector'].iloc[0]
     
-    # Get the last two days of data
-    # last_two_days = stock_data.tail(2)
-    
     # Convert to list of dictionaries format
     historical_data = []
-    # for _, row in last_two_days.iterrows():
     for _, row in stock_data.iterrows():
         historical_data.append({
             'Date': row['Date'].strftime('%Y-%m-%d'),
