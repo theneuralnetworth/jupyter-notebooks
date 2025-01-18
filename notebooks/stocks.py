@@ -20,6 +20,7 @@
 # ## Imports
 
 # %%
+import hashlib
 # Ignore pandas warnings
 import warnings
 warnings.filterwarnings('ignore')
@@ -256,6 +257,17 @@ def get_correlation_matrix():
 get_correlation_matrix()
 
 # %% [markdown]
+# ### Remove highly correlated features
+
+# %%
+data.drop(columns=['Adj Close', 'High', 'Low', 'Open', 'DTB3', 'DAAA', 'SMA_5',
+          'SMA_20', 'EMA_5', 'EMA_20', 'Month', 'Momentum_5', 'Momentum_4',
+          'Momentum_2', 'Next Month Return', 'DGS10', 'DTB6', 'DGS5', 'Daily Range',
+          'Percentage Change'], inplace=True)
+
+get_correlation_matrix()
+
+# %% [markdown]
 # ### Remove Outliers
 
 # %%
@@ -264,7 +276,7 @@ data_no_outliers = data[(data['Z-Score'] >= -2.5) & (data['Z-Score'] <= 2.5)]
 data_no_outliers = data_no_outliers.drop(columns=['Z-Score'])
 data = data_no_outliers
 
-data['Z-Score'] = (data['Next Month Return'] - data['Next Month Return'].mean()) / data['Next Month Return'].std()
+data['Z-Score'] = (data['Next Quarter Return'] - data['Next Quarter Return'].mean()) / data['Next Quarter Return'].std()
 data_no_outliers = data[(data['Z-Score'] >= -2.5) & (data['Z-Score'] <= 2.5)]
 data_no_outliers = data_no_outliers.drop(columns=['Z-Score'])
 data = data_no_outliers
@@ -283,18 +295,11 @@ data = data.round(4)
 
 # %%
 target = 'Next Day Return'
-features = [
-    'Adj Close', 'Close', 'High', 'Low',
-    'Open', 'Direction', 'Month', 'Quarter', 'week_number',
-    'week_day', 'Inflation', 'Daily Range',
-    'Volume', 'Momentum_2', 'Momentum_3', 'Momentum_4', 'Momentum_5',
-    'Volume Change', 'Percentage Change', 'Last Week Return',
-    'Daily Return', 'Sector_Communication Services',
-    'Sector_Consumer Discretionary', 'Sector_Consumer Staples',
-    'Sector_Energy', 'Sector_Financials', 'Sector_Health Care',
-    'Sector_Industrials', 'Sector_Information Technology',
-    'Sector_Materials', 'Sector_Real Estate', 'Sector_Utilities'
-]
+features = list(data.columns)
+features.remove(target)
+features.remove('Date')
+features.remove('Symbol')
+features
 # %% [markdown]
 # ### Split test and train data
 
@@ -339,6 +344,20 @@ def predict(model, test_data, test_target, target_feature='Next Day Return') -> 
     plt.show()
 
     return rmse, r2
+
+# Computes a hash of the dataset so we can detect if the dataset has changed
+def compute_data_hash(data):
+    """Compute a hash for the dataset."""
+    return hashlib.sha256(pd.util.hash_pandas_object(data, index=True).values).hexdigest()
+
+def has_data_changed(hash_file_path, current_hash):
+    try:
+        with open(hash_file_path, 'r') as f:
+            stored_hash = f.read().strip()
+        return stored_hash != current_hash
+    except FileNotFoundError:
+        return True
+
 
 
 # %% [markdown]
@@ -418,7 +437,17 @@ random_search = RandomizedSearchCV(
     error_score='raise'
 )
 
-random_search.fit(input_train, target_train)
+data_hash = compute_data_hash(data)
+if has_data_changed('../datasets/data_hash.txt', data_hash):
+    print("Data has changed or no file found. Refitting the model.")
+    random_search.fit(input_train, target_train)
+    joblib.dump(random_search, '../models/random_search.pkl')
+    with open('../datasets/data_hash.txt', 'w') as f:
+        f.write(data_hash)
+    print("RandomizedSearchCV saved to disk.")
+else:
+    random_search = joblib.load('../models/random_search.pkl')
+    print("Loaded RandomizedSearchCV from disk.")
 
 print("Best parameters found: ", random_search.best_params_)
 print("Best cross-validation score: ", np.sqrt(-random_search.best_score_))
@@ -445,93 +474,3 @@ def save_to_file(model, filepath: str):
 
 
 save_to_file(model, '../models/stocks_model.pkl')
-
-# %% [markdown]
-# ### Recursive Feature Elimination
-#
-# RFE actually made the model worse which means that the features that were removed were actually important.
-# We will keep RFE here but we will not use it in the final model.
-
-# %%
-from sklearn.feature_selection import RFE
-
-# rfe = RFE(estimator=model, n_features_to_select=10)
-# rfe.fit(input_train, target_train)
-
-# print("Selected features: ", rfe.support_)
-# print("Feature ranking: ", rfe.ranking_)
-
-# input_train_rfe = rfe.transform(input_train)
-# input_test_rfe = rfe.transform(input_test)
-
-# model.fit(input_train_rfe, target_train)
-
-# y_pred = model.predict(input_test_rfe)
-# rmse = np.sqrt(mean_squared_error(target_test, y_pred))
-# r2 = r2_score(target_test, y_pred)
-# print("RMSE: ", rmse)
-# print("R2: ", r2)
-
-# %% [markdown]
-# ### Optuna Hyperparameter tunning
-#
-# This is a more advanced hyperparameter tunning method that uses Bayesian optimization to find the best hyperparameters for the XGBoost model.
-
-# %% [markdown]
-# ## Random Forest
-
-# %%
-# import random forest regressor
-from sklearn.ensemble import RandomForestRegressor
-
-# create a random forest regressor
-model = RandomForestRegressor(n_estimators=100, random_state=42)
-
-# fit the model
-model.fit(input_train, target_train)
-
-# predict on the test set
-unoptimized_rmse, unoptimized_r2 = predict(model, input_test, target_test)
-
-print("RMSE:", unoptimized_rmse)
-print("R2:", unoptimized_r2)
-
-param_distributions = {
-    'n_estimators': randint(100, 1001), # extended range for more exploration
-    'max_depth': randint(2, 11), # shallower trees
-    'min_samples_split': randint(2, 11), # smaller values to prevent overfitting
-    'min_samples_leaf': randint(1, 11), # smaller values to prevent overfitting
-    'max_features': randint(1, len(features)) # smaller values to prevent overfitting
-}
-
-random_search = RandomizedSearchCV(
-    estimator=model,
-    param_distributions=param_distributions,
-    scoring='neg_mean_squared_error',
-    cv=5,
-    verbose=0,
-    n_jobs=-1,
-    n_iter=2,
-    random_state=42,
-    refit=True, # ---> This will refit the model, so we don't have to do it manually
-    return_train_score=False,
-    error_score='raise'
-)
-
-random_search.fit(input_train, target_train)
-
-print("Best parameters found: ", random_search.best_params_)
-print("Best cross-validation score: ", np.sqrt(-random_search.best_score_))
-
-best_model = random_search.best_estimator_
-y_pred = best_model.predict(input_test)
-test_rmse = np.sqrt(mean_squared_error(target_test, y_pred))
-print("Test RMSE:", test_rmse)
-
-# Predict on the test set
-optimized_rsme, optimized_r2 = predict(best_model, input_test, target_test)
-print(f"RMSE: {optimized_rsme:.4f}, diff: {optimized_rsme - unoptimized_rmse}")
-print(f"R2: {optimized_r2:.4f}, diff: {optimized_r2 - unoptimized_r2}")
-
-
-# %%
