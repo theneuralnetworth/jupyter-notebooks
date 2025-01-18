@@ -161,11 +161,12 @@ data['Last Week Return'] = (data['Close'] / data['Close'].shift(7) - 1) * 100
 #Future daily return (target)
 data['Daily Return'] = data['Close'].pct_change()
 data['Next Day Return'] = data['Daily Return'].shift(-1) * 100
-data['Next Week Return'] = (data['Close'] / data['Close'].shift(-7)) * 100
-data['Next Month Return'] = (data['Close'] / data['Close'].shift(-30)) * 100
-data['Next Quarter Return'] = (data['Close'] / data['Close'].shift(-63)) * 100
+data['Next Week Return'] = (data['Close'] / data['Close'].shift(-7) - 1) * 100
+data['Next Month Return'] = (data['Close'] / data['Close'].shift(-30) - 1) * 100
+data['Next Quarter Return'] = (data['Close'] / data['Close'].shift(-63) - 1) * 100 # excludes weekends
 
-#data.info()
+random_row = data.sample(n=1)
+random_row
 
 # %% [markdown]
 # #### Inflation
