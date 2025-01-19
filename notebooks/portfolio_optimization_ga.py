@@ -21,17 +21,17 @@
 # %%
 import numpy as np
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # %%
 class PortfolioOptimizationGA:
-    def __init__(self, returns, sectors, covariance_matrix, n_assets, risk_aversion, min_return, max_weight, min_weight, excluded_sectors,
+    def __init__(self, returns, sectors, n_assets, risk_aversion, min_return, max_weight, min_weight, excluded_sectors,
                  weight_penalty=1000, return_penalty=1000, sector_penalty=1000, optimal_fitness_result=1000, no_improvement_generations=50,
                  generations=1000, crossover_rate=0.7, mutation_rate=0.1):
         # Existing parameters
         self.returns = returns
         self.sectors = sectors
-        self.cov_matrix = covariance_matrix
         self.n_assets = n_assets
         self.risk_aversion = risk_aversion
         self.min_return = min_return
@@ -60,7 +60,7 @@ class PortfolioOptimizationGA:
         R = np.dot(self.returns, portfolio)
         
         # Calculate portfolio variance (risk)
-        portfolio_variance = np.dot(portfolio.T, np.dot(self.cov_matrix, portfolio))
+        portfolio_variance = np.dot(portfolio.T, portfolio)
         sigma_squared = portfolio_variance
         
         # Calculate fitness (expected return - λ * risk)
@@ -68,7 +68,7 @@ class PortfolioOptimizationGA:
         
         # Penalties for constraints
         # Penalty for weight constraints
-        if any(portfolio < self.min_weight) or any(portfolio > self.max_weight):
+        if any((portfolio < self.min_weight) & (portfolio > 0)) or any(portfolio > self.max_weight):
             fitness_value -= self.weight_penalty  # Apply weight penalty
 
         # Penalty for return constraints
@@ -123,9 +123,20 @@ class PortfolioOptimizationGA:
         total_weight = np.sum(portfolio)
         if total_weight > 0:
             portfolio = portfolio / total_weight
+
+            for i in range(len(portfolio)):
+                if portfolio[i] < self.min_weight:
+                    if i < len(portfolio) - 1:
+                        portfolio[i + 1] += portfolio[i]
+                    else:
+                        portfolio[0] += portfolio[i]
+                    portfolio[i] = 0
         else:
             # If all weights are zero, reinitialize to uniform distribution
             portfolio = np.ones(self.n_assets) / self.n_assets
+        
+        total_weight = np.sum(portfolio)
+        print(total_weight)
         return portfolio
 
     def generate_initial_population(self):
@@ -184,6 +195,10 @@ class PortfolioOptimizationGA:
 
         # Return the best portfolio found
         best_portfolio = max(population, key=self.fitness)
+        print(best_portfolio)
+
+        total_weight = np.sum(best_portfolio)
+        print(total_weight)
         return best_portfolio
 
 # %%
@@ -193,19 +208,6 @@ sectors = [
     "Consumer", "Industrial", "Real Estate", "Utilities", 
     "Communications", "Materials"
 ]
-
-cov_matrix = np.array([
-    [0.04, 0.02, 0.03, 0.01, 0.02, 0.01, 0.02, 0.01, 0.03, 0.02],
-    [0.02, 0.05, 0.02, 0.02, 0.01, 0.02, 0.01, 0.02, 0.02, 0.01],
-    [0.03, 0.02, 0.06, 0.02, 0.01, 0.02, 0.02, 0.03, 0.01, 0.01],
-    [0.01, 0.02, 0.02, 0.03, 0.01, 0.01, 0.02, 0.01, 0.02, 0.02],
-    [0.02, 0.01, 0.01, 0.01, 0.04, 0.01, 0.03, 0.02, 0.01, 0.01],
-    [0.01, 0.02, 0.02, 0.01, 0.01, 0.05, 0.02, 0.01, 0.02, 0.01],
-    [0.02, 0.01, 0.02, 0.02, 0.03, 0.02, 0.04, 0.01, 0.02, 0.02],
-    [0.01, 0.02, 0.03, 0.01, 0.02, 0.01, 0.01, 0.03, 0.02, 0.02],
-    [0.03, 0.02, 0.01, 0.02, 0.01, 0.02, 0.02, 0.02, 0.05, 0.02],
-    [0.02, 0.01, 0.01, 0.02, 0.01, 0.01, 0.02, 0.02, 0.02, 0.03]
-])
 
 n_assets = 10
 risk_aversion = 2
@@ -225,21 +227,28 @@ generations = 5000
 crossover_rate = 0.7
 mutation_rate = 0.2
 
-ga = PortfolioOptimizationGA(returns, sectors, cov_matrix, n_assets, risk_aversion, min_return, max_weight, min_weight, excluded_sectors,
+ga = PortfolioOptimizationGA(returns, sectors, n_assets, risk_aversion, min_return, max_weight, min_weight, excluded_sectors,
                              weight_penalty, return_penalty, sector_penalty, optimal_fitness_result, no_improvement_generations,
                              generations, crossover_rate, mutation_rate)
-best_portfolio = ga.run()
+#best_portfolio = ga.run()
 
-print("Optimized Portfolio Weights:", best_portfolio)
+#print("Optimized Portfolio Weights:", best_portfolio)
 
 
 # %%
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Replace with your frontend's URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 class PortfolioRequest(BaseModel):
     returns: list[float]
     sectors: list[str]
-    covariance_matrix: list[list[float]]
     n_assets: int
     risk_aversion: float
     min_return: float
@@ -260,13 +269,11 @@ async def optimize_portfolio(request: PortfolioRequest):
     try:
         # Convert lists to numpy arrays
         returns = np.array(request.returns)
-        covariance_matrix = np.array(request.covariance_matrix)
 
         # Initialize the genetic algorithm
         ga = PortfolioOptimizationGA(
             returns=returns,
             sectors=request.sectors,
-            covariance_matrix=covariance_matrix,
             n_assets=request.n_assets,
             risk_aversion=request.risk_aversion,
             min_return=request.min_return,
