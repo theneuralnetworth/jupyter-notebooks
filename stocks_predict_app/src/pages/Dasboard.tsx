@@ -11,6 +11,7 @@ import {
 import StockGraph from '../components/StockGraph'
 import { IStock } from '../interfaces/IStock'
 import { useEffect, useState } from 'react'
+import sp500image from '../assets/sp500.png'
 
 interface IDashboardProps {
     stockData: IStock[]
@@ -75,7 +76,7 @@ const Dashboard = (props: IDashboardProps) => {
                                                 }}
                                                 onError={(e) =>
                                                     (e.currentTarget.src =
-                                                        'https://logo.clearbit.com/apple.com')
+                                                        sp500image)
                                                 }
                                             />
                                         </Box>
@@ -126,7 +127,12 @@ const Dashboard = (props: IDashboardProps) => {
                     height={500}
                 />
             )}
-            {!loading && selectedStock && <StockGraph stock={selectedStock} />}
+            {!loading && selectedStock && (
+                <StockGraph
+                    stock={selectedStock}
+                    listStocks={props.stockData}
+                />
+            )}
         </Box>
     )
 }
