@@ -27,49 +27,52 @@ const Portfolio = (props: IPortfolioProps) => {
     const setSectors = new Set(props.stockData.map((s) => s['GICS Sector']))
     const [loading, setLoading] = useState(false)
     const listSectors = [...setSectors]
+    console.log('props.stockData:', props.stockData)
     const [porfolio, setPortfolio] = React.useState<any[]>([])
     const { handleSubmit, control } = useForm({
         defaultValues: {
-            returns:
-            props.stockData.map(s=> s.percentageValue),
-            sectors: listSectors,
+            returns: props.stockData.map((s) => s.percentageValue),
+            sectors: props.stockData.map((s) => s['GICS Sector']),
             n_assets: props.stockData.length,
             excluded_sectors: listSectors,
-            risk_aversion: 2,
-            min_return: 0.05,
+            risk_aversion: 0.1,
+            min_return: 5,
             max_weight: 30,
             min_weight: 15,
             weight_penalty: 1000,
             return_penalty: 1000,
-            sector_penalty: 10000,
+            sector_penalty: 100000,
             optimal_fitness_result: 1000,
             no_improvement_generations: 1000,
             generations: 1000,
-            crossover_rate: 0,
-            mutation_rate: 0.4,
+            crossover_rate: 0.4,
+            mutation_rate: 0.8,
         },
     })
     console.log('listSectors:', listSectors)
     const onSubmit = async (data: any) => {
         try {
-            console.log('submiting...', data)
             setLoading(true)
+
+            data = {
+                ...data,
+                min_return: data.min_return / 100,
+                max_weight: data.max_weight / 100,
+                min_weight: data.min_weight / 100,
+                returns: data.returns.map(Number),
+                excluded_sectors: listSectors
+                    .filter((s) => !data.excluded_sectors.includes(s))
+                    .map((s: any) => s.trim()),
+            }
+            
+            console.log('submiting...', data)
 
             const response = await fetch(
                 'http://127.0.0.1:8000/optimize-portfolio',
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        ...data,
-                        max_weight: data.max_weight / 100,
-                        min_weight: data.min_weight / 100,
-                        returns: data.returns.map(Number),
-                        sectors: listSectors.map((s: any) => s.trim()),
-                        excluded_sectors: listSectors
-                            .filter((s) => !data.sectors.includes(s))
-                            .map((s: any) => s.trim()),
-                    }),
+                    body: JSON.stringify(data),
                 }
             )
             if (response.ok) {
@@ -123,7 +126,7 @@ const Portfolio = (props: IPortfolioProps) => {
                                             render={({ field }) => (
                                                 <TextField
                                                     {...field}
-                                                    label="Min Return"
+                                                    label="Min Return (%)"
                                                     type="number"
                                                     fullWidth
                                                     margin="normal"
@@ -241,11 +244,17 @@ const Portfolio = (props: IPortfolioProps) => {
                     {!loading && porfolio.length > 0 ? (
                         <PortfolioGraph
                             listStocks={porfolio
-                                .filter((ps) => ps !== 0)
-                                .map((s, i) => ({
-                                    stock: props.stockData[i],
-                                    weight: s.toFixed(3) * 100,
-                                }))}
+                                .map((s, i) => {
+                                    if (s !== 0) {
+                                        return {
+                                            stock: props.stockData[i],
+                                            weight: s.toFixed(3) * 100,
+                                        }
+                                    }
+                                    return undefined
+                                })
+                                .filter((item): item is { stock: any; weight: number } => item !== undefined)
+                            }
                         />
                     ) : (
                         <Card style={{ width: 600, height: 600 }}>
@@ -287,16 +296,15 @@ const Portfolio = (props: IPortfolioProps) => {
                                             alignItems="center"
                                             justifyContent="center"
                                         >
-
-                                        <Typography variant="h5">
-                                            Build your portfolio
-                                        </Typography>
-                                        <img
-                                            width={450}
-                                            height={450}
-                                            src={portfolio_empty}
-                                            alt="Empty Portfolio"
-                                        />
+                                            <Typography variant="h5">
+                                                Build your portfolio
+                                            </Typography>
+                                            <img
+                                                width={450}
+                                                height={450}
+                                                src={portfolio_empty}
+                                                alt="Empty Portfolio"
+                                            />
                                         </Box>
                                     )}
                                 </Box>

@@ -4,9 +4,18 @@ import joblib
 import pandas as pd
 from feature_calculator import get_stock_history, calculate_features_with_history
 import os
+from fastapi.middleware.cors import CORSMiddleware
 
 # Create FastAPI app
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Replace with your frontend's URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Get the base directory (parent of notebooks)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -76,9 +76,8 @@ class PortfolioOptimizationGA:
             fitness_value -= self.return_penalty  # Apply return penalty
 
         # Penalty for sector constraints
-        
         for i, sector in enumerate(self.sectors):
-            if sector in excluded_sectors and portfolio[i] > 0:
+            if sector in self.excluded_sectors and portfolio[i] > 0:
                 fitness_value -= self.sector_penalty
 
         return fitness_value
@@ -136,7 +135,6 @@ class PortfolioOptimizationGA:
             portfolio = np.ones(self.n_assets) / self.n_assets
         
         total_weight = np.sum(portfolio)
-        print(total_weight)
         return portfolio
 
     def generate_initial_population(self):
@@ -195,10 +193,7 @@ class PortfolioOptimizationGA:
 
         # Return the best portfolio found
         best_portfolio = max(population, key=self.fitness)
-        print(best_portfolio)
-
-        total_weight = np.sum(best_portfolio)
-        print(total_weight)
+        print("Best portfolio found:", best_portfolio)
         return best_portfolio
 
 # %%
@@ -269,6 +264,8 @@ async def optimize_portfolio(request: PortfolioRequest):
     try:
         # Convert lists to numpy arrays
         returns = np.array(request.returns)
+
+        print(request)
 
         # Initialize the genetic algorithm
         ga = PortfolioOptimizationGA(

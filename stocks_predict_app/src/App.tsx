@@ -17,6 +17,29 @@ const App: React.FC = () => {
     const [stockData, setStockData] = useState<IStock[]>([])
     const theme = darkMode ? darkTheme : lightTheme
 
+    const mainStocks = [
+        'AAPL', // Apple Inc.
+        'MSFT', // Microsoft Corporation
+        'NVDA', // NVIDIA Corporation
+        'GOOGL', // Alphabet Inc. (Class A)
+        'TSLA', // Tesla, Inc.
+        'JNJ', // Johnson & Johnson
+        'PG', // Procter & Gamble Co.
+        'HD', // The Home Depot, Inc.
+        'MA', // Mastercard Incorporated
+        'KO', // The Coca-Cola Company
+        'PEP', // PepsiCo, Inc.
+        'ABBV', // AbbVie Inc.
+        'ABNB', // Airbnb, Inc.
+        'CSCO', // Cisco Systems, Inc.
+        'TMO', // Thermo Fisher Scientific Inc.
+        'COST', // Costco Wholesale Corporation
+        'WMT', // Walmart Inc.
+        'MCD', // McDonald's Corporation
+        'ADBE', // Adobe Inc.
+        'CRM', // Salesforce, Inc.
+    ]
+
     // Fetch stocks for the last 10 days
     const fetchStockData = async (stocks: any[]) => {
         const csvFilePath = '/assets/stocks.csv'
@@ -26,8 +49,9 @@ const App: React.FC = () => {
             skipEmptyLines: true,
             complete: async (result) => {
                 const listStocks: IStock[] = []
-                //const mainStocks = ['AAPL', 'MSFT', 'AMZN', 'NVDA']
-                for (const stock of stocks) {
+                for (const stock of stocks.filter((s) =>
+                    mainStocks.some((ms) => ms === s.Symbol)
+                )) {
                     const stockdates: any[] = result.data
                         .filter((entry: any) => entry.Symbol === stock.Symbol)
                         .sort(
@@ -36,11 +60,42 @@ const App: React.FC = () => {
                                 new Date(b.Date).getTime()
                         )
                         .slice(-30)
-                    console.log(stockdates)
-                    const lastValue =  stockdates.length > 0
-                    ? stockdates[stockdates.length - 1].Close -
-                      stockdates[stockdates.length - 1].Open
-                    : 0
+
+                    const response = await fetch(
+                        'http://127.0.0.1:8001/predict',
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                stock_symbol: stock.Symbol,
+                            }),
+                        }
+                    )
+                    let resultPredict
+                    if (response.ok) {
+                        resultPredict = await response.json()
+                        console.log('Predict value:', resultPredict)
+                    } else {
+                        console.error('Error:', response.statusText)
+                    }
+
+                    const newStockDate = {
+                        Date: new Date(resultPredict.prediction_date).getTime() ,
+                        Open: resultPredict.current_price,
+                        Close: resultPredict.current_price + ((resultPredict.predicted_return / 100) * resultPredict.current_price),
+                    }
+
+                    console.log('New stock date:', newStockDate)
+
+                    stockdates.push(newStockDate)
+
+                    console.log('Stock dates:', stockdates)
+
+                    const lastValue =
+                        stockdates.length > 0
+                            ? stockdates[stockdates.length - 1].Close -
+                              stockdates[stockdates.length - 1].Open
+                            : 0
                     const element = {
                         ...stock,
                         dates: stockdates.map((entry: any) => ({
@@ -52,12 +107,16 @@ const App: React.FC = () => {
                                 ? stockdates[stockdates.length - 1].Close
                                 : 0
                         ),
-                        lastValue:lastValue,
-                        percentageValue: stockdates.length > 0 ? lastValue / stockdates[stockdates.length - 1].Open : 0,
+                        lastValue: lastValue,
+                        percentageValue:
+                            stockdates.length > 0
+                                ? lastValue /
+                                  stockdates[stockdates.length - 1].Open
+                                : 0,
                     }
+
                     listStocks.push(element)
                 }
-                console.log(listStocks.find((s) => s.Symbol === 'AAPL'))
                 setStockData(listStocks)
             },
             error: (error) => {

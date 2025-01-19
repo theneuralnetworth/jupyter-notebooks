@@ -12,7 +12,7 @@ interface IStockPortfolio {
 }
 
 interface IStockGraphProps {
-    listStocks: IStockPortfolio[]
+    listStocks: IStockPortfolio[] | []
 }
 
 const generateColors = (numColors: number) => {

@@ -17,7 +17,7 @@ interface IDashboardProps {
 }
 
 const Dashboard = (props: IDashboardProps) => {
-    const mainStocks = ['AAPL', 'MSFT', 'AMZN', 'NVDA']
+    const mainStocks = ['PEP', 'MSFT', 'ABNB', 'NVDA']
     const [selectedStock, setSelectedStock] = useState<IStock | null>(null)
     const [loading, setLoading] = useState<boolean>(true)
 
