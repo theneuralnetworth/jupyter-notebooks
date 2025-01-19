@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 import requests
 import seaborn as sns
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import xgboost as xgb
 import lightgbm as lgb
 import numpy as np
@@ -223,22 +223,36 @@ if data['Inflation'].isnull().any():
 api_key = 'fc61c0046f24fb037f982ee29ae1ab11'
 fred = Fred(api_key = api_key)
 
-# List of economic indicators to fetch from FRED
+# List of economic indicators to fetch from FRED API
 economic_indicators = ["DTB4WK", "DTB3", "DTB6", "DGS5", "DGS10", "DAAA", "DBAA"]
 
 features_fred = pd.DataFrame()
 
+# Fetch data for each economic indicator and merge it into features_fred df
 for indicator in economic_indicators :
     series_data = fred.get_series(indicator)
     series_data = series_data.reset_index()
     series_data.columns = ['Date', indicator]
     features_fred = pd.merge(features_fred, series_data, on='Date', how='outer') if not features_fred.empty else series_data
 
+# Ensure the Date column has no timezone information to match with the FRED data
 data['Date'] = data['Date'].dt.tz_localize(None)
 
+# Convert the Date column in the FRED data to datetime format
 features_fred['Date'] = pd.to_datetime(features_fred['Date'])
 
+# Fill missing values with median for each economic indicator
+for col in economic_indicators:
+    features_fred[col].fillna(features_fred[col].median(), inplace=True)
+
 data = pd.merge(data, features_fred, on='Date', how='left')
+
+# Calculating interest rate spreads based on the indicators
+data['TE1'] = data['DGS10'] - data['DTB4WK']
+data['TE2'] = data['DGS10'] - data['DTB3']
+data['TE3'] = data['DGS10'] - data['DTB6']
+data['TE5'] = data['DTB3'] - data['DTB4WK']
+data['TE6'] = data['DTB6'] - data['DTB4WK']
 
 # %% [markdown]
 # ## Feature importance analysis
@@ -249,7 +263,7 @@ data = pd.merge(data, features_fred, on='Date', how='left')
 def get_correlation_matrix():
     numeric_columns = data.select_dtypes(include=[float, int])
     correlation_matrix = numeric_columns.corr()
-    plt.figure(figsize=(12, 10))
+    plt.figure(figsize=(20, 16))
     sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap='coolwarm', square=True, cbar_kws={"shrink": .8})
     plt.title('Correlation Matrix')
     plt.show()
@@ -263,7 +277,7 @@ get_correlation_matrix()
 data.drop(columns=['Adj Close', 'High', 'Low', 'Open', 'DTB3', 'DAAA', 'SMA_5',
           'SMA_20', 'EMA_5', 'EMA_20', 'Month', 'Momentum_5', 'Momentum_4',
           'Momentum_2', 'Next Month Return', 'DGS10', 'DTB6', 'DGS5', 'Daily Range',
-          'Percentage Change'], inplace=True)
+          'Percentage Change', 'TE2', 'TE3', 'TE5'], inplace=True)
 
 get_correlation_matrix()
 
@@ -317,7 +331,8 @@ input_train, input_test, target_train, target_test = train_test_split(input_data
 from typing import Union
 def predict(model, test_data, test_target, target_feature='Next Day Return') -> Union[float, float]:
     """A reusable function to test data and a model and predicts the target feature. It then prints our the following metrics:
-    - Squared Mean Squared Error
+    - Mean Absolute Error (MAE)
+    - Root Mean Squared Error (RMSE)
     - Coefficient of Determination (R2)
 
     Args:
@@ -326,11 +341,12 @@ def predict(model, test_data, test_target, target_feature='Next Day Return') -> 
         test_target (_type_): the target data to predict
         target_feature (str, optional): The name of the target feature. Defaults to 'Next Day Return'.
     Returns:
-        float, float: The Squared Mean Squared Error and Coefficient of Determination (R2)
+        float, float, float: The Mean Absolute Error, Root Mean Squared Error and Coefficient of Determination (R2)
     """
     # Predict on the test set
     prediction = model.predict(test_data)
 
+    mae = mean_absolute_error(target_test, prediction)
     rmse = np.sqrt(mean_squared_error(test_target, prediction))
     r2 = r2_score(test_target, prediction)
 
@@ -343,7 +359,7 @@ def predict(model, test_data, test_target, target_feature='Next Day Return') -> 
     plt.ylabel(target_feature)
     plt.show()
 
-    return rmse, r2
+    return mae, rmse, r2
 
 # Computes a hash of the dataset so we can detect if the dataset has changed
 def compute_data_hash(data):
@@ -384,7 +400,18 @@ model.fit(input_train, target_train, verbose=True)
 importances = model.feature_importances_
 feature_importance_df = pd.DataFrame({'Feature': features, 'Importance': importances})
 feature_importance_df = feature_importance_df.sort_values('Importance', ascending=False)
-feature_importance_df
+print(feature_importance_df)
+
+plt.figure(figsize=(10, 8))
+sns.barplot(
+    x=feature_importance_df['Importance'], 
+    y=feature_importance_df['Feature'], 
+    palette="viridis"
+)
+plt.title('Feature Importance in the model')
+plt.xlabel('Importance')
+plt.ylabel('Feature')
+plt.show()
 
 # %% [markdown]
 # ### Permutation importance
@@ -400,7 +427,8 @@ for i in result.importances_mean.argsort()[::-1]:
 
 # %%
 # Predict on the test set
-unoptimized_rmse, unoptimized_r2 = predict(model, input_test, target_test)
+unoptimized_mae, unoptimized_rmse, unoptimized_r2 = predict(model, input_test, target_test)
+print("MAE:", unoptimized_mae)
 print("RMSE:", unoptimized_rmse)
 print("R2:", unoptimized_r2)
 
@@ -458,7 +486,8 @@ test_rmse = np.sqrt(mean_squared_error(target_test, y_pred))
 print("Test RMSE:", test_rmse)
 
 # Predict on the test set
-optimized_rsme, optimized_r2 = predict(best_model, input_test, target_test)
+optimized_mae, optimized_rsme, optimized_r2 = predict(best_model, input_test, target_test)
+print(f"MAE: {optimized_mae:.4f}, diff: {optimized_mae - unoptimized_mae}")
 print(f"RMSE: {optimized_rsme:.4f}, diff: {optimized_rsme - unoptimized_rmse}")
 print(f"R2: {optimized_r2:.4f}, diff: {optimized_r2 - unoptimized_r2}")
 
