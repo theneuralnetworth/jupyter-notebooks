@@ -17,7 +17,7 @@ interface IDashboardProps {
 }
 
 const Dashboard = (props: IDashboardProps) => {
-    const mainStocks = ['PEP', 'MSFT', 'ABNB', 'NVDA']
+    const mainStocks = ['ABNB', 'PEP', 'MSFT', 'NVDA']
     const [selectedStock, setSelectedStock] = useState<IStock | null>(null)
     const [loading, setLoading] = useState<boolean>(true)
 
@@ -123,7 +123,7 @@ const Dashboard = (props: IDashboardProps) => {
                     style={{ marginTop: '16px' }}
                     animation="wave"
                     variant="rectangular"
-                    height={800}
+                    height={500}
                 />
             )}
             {!loading && selectedStock && <StockGraph stock={selectedStock} />}

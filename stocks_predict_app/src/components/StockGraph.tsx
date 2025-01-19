@@ -97,7 +97,7 @@ const StockGraph = (props: IStockGraphProps) => {
                 <Typography variant="h6" gutterBottom>
                     Stock Performance {props.stock?.Company}
                 </Typography>
-                <Box mt={2}>
+                <Box width={900} height={'100%'}>
                     <Line data={chartData} options={chartOptions} />
                 </Box>
             </CardContent>

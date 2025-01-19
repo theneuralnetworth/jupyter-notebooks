@@ -9,6 +9,7 @@ export interface IStock {
     name: Date;
     value: number;
     lastValue: number;
+    percentageValue: number;
     dates: IStockDate[]
 }
 
