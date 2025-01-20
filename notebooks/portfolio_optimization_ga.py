@@ -23,6 +23,7 @@ import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import matplotlib.pyplot as plt
 
 # %%
 class PortfolioOptimizationGA:
@@ -144,6 +145,15 @@ class PortfolioOptimizationGA:
             individual = self.normalize_portfolio(individual)
             population.append(individual)
         return np.array(population)
+    
+    def plot_best_fitness(self, fitness_history):
+        plt.figure(figsize=(8, 4))
+        plt.plot(fitness_history, linewidth=2, color='red')
+        plt.xlabel('Generation')
+        plt.ylabel('Best Fitness')
+        plt.title('Best Fitness Evolution Over Generations')
+        plt.grid(True)
+        plt.show()
 
     def run(self):
         # Initialize population
@@ -151,6 +161,8 @@ class PortfolioOptimizationGA:
 
         best_fitness = -np.inf  # Initialize the best fitness to a very low value
         no_improvement_count = 0  # Count generations without fitness improvement
+
+        fitness_history = []
 
         for gen in range(self.generations):
             new_population = []
@@ -174,6 +186,9 @@ class PortfolioOptimizationGA:
             # Check fitness of the best individual in the population
             current_best_fitness = max([self.fitness(individual) for individual in population])
             print(f"Generation {gen}: Best fitness = {current_best_fitness}")
+           
+            fitness_history.append(current_best_fitness)
+           
             # Check if we've reached the optimal fitness
             if current_best_fitness >= self.optimal_fitness_result:
                 print(f"Optimal fitness result reached: {current_best_fitness}")
@@ -191,6 +206,7 @@ class PortfolioOptimizationGA:
                 print(f"No improvement in fitness after {self.no_improvement_generations} generations.")
                 break
 
+        #self.plot_best_fitness(fitness_history)
         # Return the best portfolio found
         best_portfolio = max(population, key=self.fitness)
         print("Best portfolio found:", best_portfolio)
